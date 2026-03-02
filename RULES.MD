@@ -4,6 +4,31 @@
 
 -----
 
+## 🚨 CRITICAL: Database Migration Safety
+
+**NEVER run `npx supabase db reset` or any command that deletes existing data without explicit user approval.**
+
+When applying new migrations:
+- ✅ Use `npx supabase migration new <name>` to create new migrations
+- ✅ Use `npx supabase db push` to apply migrations to remote database
+- ✅ Test migrations locally first, but ASK before running `npx supabase db reset`
+- ❌ NEVER automatically reset the database when adding new tables or columns
+- ❌ NEVER use DROP TABLE, TRUNCATE, or DELETE commands in migrations without user approval
+
+**Additive migrations are safe:**
+- Creating new tables
+- Adding new columns with defaults
+- Creating new indexes
+- Adding new functions or policies
+
+**Destructive migrations require explicit approval:**
+- Dropping tables or columns
+- Changing column types that may lose data
+- Removing constraints
+- Any operation that could delete or modify existing data
+
+-----
+
 ## CRITICAL SECURITY RULES (Must Read First)
 
 ### Rule 0: Security Isolation
@@ -599,6 +624,14 @@ app/api/users/[id]/route.ts      // DELETE /api/users/:id (delete)
 ## 12. Environment Isolation
 
 ### Principle: Separate Everything by Environment
+
+**Always use local Supabase schema in development**:
+When `NODE_ENV=development` (typically on `localhost:3000` or `localhost:3002`), always execute database changes, RLS fixes, and migrations against the **local Supabase instance** (Docker). Never apply development changes to the production/live Supabase project unless explicitly requested to "push to live".
+
+**Triggers for Local Schema**:
+- Modifying `supabase/migrations/*.sql`
+- Executing SQL scripts for testing or fixes
+- Updating RLS policies for feature development
 
 **Never share databases between environments**:
 

@@ -18,14 +18,8 @@ export function handleSupabaseError(
     context?: Record<string, any>
 ): string {
     // Log technical details with context
-    console.error("Supabase Error Caught:", {
-        message: error?.message,
-        code: error?.code,
-        details: error?.details,
-        hint: error?.hint,
-        context,
-        timestamp: new Date().toISOString(),
-    });
+    console.error("Supabase Error Caught:", error);
+    console.error("Context:", context);
 
     const errorCode = error?.code;
 

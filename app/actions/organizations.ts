@@ -1,42 +1,87 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { revalidatePath } from "next/cache";
 import { withErrorHandling } from "@/lib/supabase/errors";
+import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 
-/**
- * Creates a new organization and adds the creator as the 'owner'.
- * 
- * @param {string} name - Name of the organization.
- * @param {string} slug - Unique URL-friendly identifier.
- * @returns {Promise<ApiResponse<any>>}
- */
+const ACTIVE_ORG_COOKIE = "current_org_id";
+
+async function getActiveOrg() {
+    const cookieStore = await cookies();
+    const orgId = cookieStore.get(ACTIVE_ORG_COOKIE)?.value;
+    if (!orgId) throw new Error("No active organization");
+    return orgId;
+}
+
+export async function updateOrganizationDetails(data: {
+    name?: string;
+    slug?: string;
+    invite_expiration_days?: number;
+}) {
+    return withErrorHandling(async () => {
+        const supabase = await createClient();
+        const orgId = await getActiveOrg();
+
+        // Check permissions (Owner or Super Admin)
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error("Unauthorized");
+
+        const [{ data: member }, { data: profile }] = await Promise.all([
+            supabase
+                .from("organization_members")
+                .select("role")
+                .eq("organization_id", orgId)
+                .eq("user_id", user.id)
+                .maybeSingle(),
+            supabase
+                .from("profiles")
+                .select("role")
+                .eq("id", user.id)
+                .maybeSingle()
+        ]);
+
+        const isOwner = member?.role === "owner";
+        const isSuperAdmin = profile?.role === "super_admin";
+
+        if (!isOwner && !isSuperAdmin) {
+            throw new Error("Only organization owners can modify organization settings.");
+        }
+
+        const { error } = await supabase
+            .from("organizations")
+            .update(data)
+            .eq("id", orgId);
+
+        if (error) throw error;
+
+        revalidatePath("/settings");
+        revalidatePath("/users");
+        return { success: true };
+    });
+}
+
 export async function createOrganization(name: string, slug: string) {
     return withErrorHandling(async () => {
         const supabase = await createClient();
 
-        // Auth Validation
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-        if (authError || !user) throw new Error("Unauthorized");
+        // 1. Get current user
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error("Unauthorized");
 
-        // Input Validation
-        if (!name.trim() || !slug.trim()) throw new Error("Name and slug are required.");
-
-        // 1. Create the organization row
-        // Note: RLS will allow this if the user is authenticated.
+        // 2. Create organization
         const { data: org, error: orgError } = await supabase
             .from("organizations")
             .insert({
                 name,
-                slug: slug.toLowerCase(),
-                owner_id: user.id
+                slug
             })
             .select()
             .single();
 
         if (orgError) throw orgError;
 
-        // 2. Add the user as the 'owner' in the membership table
+        // 3. Add user as owner in organization_members
         const { error: memberError } = await supabase
             .from("organization_members")
             .insert({
@@ -45,66 +90,56 @@ export async function createOrganization(name: string, slug: string) {
                 role: "owner"
             });
 
-        if (memberError) {
-            // Manual cleanup (since we don't have true transactions across tables easily in Supabase JS without RPC)
-            await supabase.from("organizations").delete().eq("id", org.id);
-            throw memberError;
-        }
+        if (memberError) throw memberError;
 
-        revalidatePath("/dashboard/organizations");
+        revalidatePath("/dashboard");
         return org;
-    }, { action: "createOrganization", name });
+    });
 }
 
-/**
- * Fetches all organizations the current user is a member of.
- * RLS handles the filtering automatically.
- */
 export async function getMyOrganizations() {
     return withErrorHandling(async () => {
         const supabase = await createClient();
-        const { data, error } = await supabase
-            .from("organizations")
-            .select(`
-        *,
-        organization_members!inner(role)
-      `);
 
-        if (error) throw error;
-        return data;
-    }, { action: "getMyOrganizations" });
-}
-
-/**
- * Creates a project within a specific organization.
- * Validates that the user has access to that organization.
- * 
- * @param {string} organizationId
- * @param {string} name
- */
-export async function createProject(organizationId: string, name: string) {
-    return withErrorHandling(async () => {
-        const supabase = await createClient();
-
-        // Auth Check
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error("Unauthorized");
 
-        // Insert Project
-        // RLS will fail this if the user is not a member of the organizationId.
-        const { data, error } = await supabase
-            .from("projects")
-            .insert({
-                organization_id: organizationId,
-                name,
-                created_by: user.id
-            })
-            .select()
+        // Check if user is super admin
+        const { data: profile } = await supabase
+            .from("profiles")
+            .select("role")
+            .eq("id", user.id)
             .single();
 
-        if (error) throw error;
+        const isSuperAdmin = profile?.role === "super_admin";
 
-        revalidatePath(`/dashboard/org/${organizationId}`);
+        if (isSuperAdmin) {
+            // Super Admins see all organizations
+            const { data, error } = await supabase
+                .from("organizations")
+                .select(`*`)
+                .order("name");
+
+            if (error) throw error;
+
+            // Map to expected structure (simulate member role if needed, or leave empty)
+            // The Context expects 'organization_members' array to extract role. 
+            // We can return clean organizations, and the context map will result in undefined role, which is handled.
+            return data.map(org => ({
+                ...org,
+                organization_members: [] // No specific member role for Super Admin view (or we could fetch it)
+            }));
+        }
+
+        const { data, error } = await supabase
+            .from("organizations")
+            .select(`
+                *,
+                organization_members!inner(role)
+            `)
+            .eq("organization_members.user_id", user.id);
+
+        if (error) throw error;
         return data;
-    }, { action: "createProject", organizationId, name });
+    });
 }

@@ -56,8 +56,7 @@ export const NavList = ({ activeUrl, items, className, onItemClick }: NavListPro
                                 type="collapsible"
                                 onClick={(e) => {
                                     if (onItemClick) {
-                                        // Use preventDefault only for pure collapsible headers that don't have href
-                                        if (!navItem.href) e.preventDefault();
+                                        // Allow default behavior (toggle) for summary elements
                                         onItemClick(navItem);
                                     }
                                 }}

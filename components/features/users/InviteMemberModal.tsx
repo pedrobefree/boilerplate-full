@@ -1,38 +1,79 @@
 "use client";
 
-import { X, Mail, Shield } from "lucide-react";
+import { X, Mail, Shield, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Modal, ModalOverlay, Dialog } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { useState } from "react";
 import { cx } from "@/lib/utils";
+import { inviteMember } from "@/app/actions/users";
+import { useToast } from "@/components/ui/Toast";
+import { useOrganization } from "@/app/context/OrganizationContext";
 
 interface InviteMemberModalProps {
     isOpen: boolean;
     onClose: () => void;
+    onSuccess?: () => void;
+    isSuperAdmin?: boolean;
 }
 
-export const InviteMemberModal = ({ isOpen, onClose }: InviteMemberModalProps) => {
+export const InviteMemberModal = ({ isOpen, onClose, onSuccess, isSuperAdmin = false }: InviteMemberModalProps) => {
     const [email, setEmail] = useState("");
-    const [role, setRole] = useState<"admin" | "member" | "viewer">("member");
+    const [role, setRole] = useState<"owner" | "admin" | "member">("member");
+    const [isLoading, setIsLoading] = useState(false);
+    const { addToast } = useToast();
+    const { currentOrganization } = useOrganization();
+    const viewerRole = currentOrganization?.role || "member";
 
-    const handleInvite = () => {
-        // In a real app, this would call an API
-        console.log("Inviting member:", { email, role });
+    const availableRoles = [
+        { id: "owner", title: "Owner", desc: "Full access and can manage billing" },
+        { id: "admin", title: "Admin", desc: "Can manage settings and members" },
+        { id: "member", title: "Member", desc: "Can view and edit resources" }
+    ].filter(r => {
+        if (isSuperAdmin) return true;
+        if (viewerRole === "owner") return true;
+        if (viewerRole === "admin") return r.id !== "owner";
+        return false;
+    });
+
+    const handleInvite = async () => {
+        if (!email.trim() || !email.includes("@")) return;
+
+        setIsLoading(true);
+        try {
+            const result = await inviteMember(email, role);
+            if (result.success) {
+                addToast({ title: "Member invited successfully", type: "success" });
+                setEmail("");
+                setRole("member");
+                onSuccess?.();
+            } else {
+                addToast({ title: "Failed to invite member", description: result.error, type: "error" });
+            }
+        } catch (error) {
+            addToast({ title: "Error inviting member", type: "error" });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleClose = () => {
+        setEmail("");
+        setRole("member");
         onClose();
     };
 
     return (
-        <ModalOverlay isOpen={isOpen} onOpenChange={onClose} isDismissable>
+        <ModalOverlay isOpen={isOpen} onOpenChange={handleClose} isDismissable>
             <Modal className="sm:max-w-md">
                 <Dialog className="outline-none">
                     <div className="relative">
                         {/* Header */}
                         <div className="p-6 border-b border-gray-100">
                             <h2 className="text-xl font-bold text-gray-900">Invite Team Member</h2>
-                            <p className="text-sm text-gray-500 mt-1">Send an invitation to join your workspace</p>
+                            <p className="text-sm text-gray-500 mt-1">Add an existing user to your workspace</p>
                             <button
-                                onClick={onClose}
+                                onClick={handleClose}
                                 className="absolute right-6 top-6 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
                             >
                                 <X className="size-5" />
@@ -47,11 +88,12 @@ export const InviteMemberModal = ({ isOpen, onClose }: InviteMemberModalProps) =
                                 </label>
                                 <Input
                                     type="email"
-                                    placeholder="olivia@untitledui.com"
+                                    placeholder="user@example.com"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     autoFocus
                                 />
+                                <p className="text-xs text-gray-500">User must have an existing account to be added.</p>
                             </div>
 
                             <div className="space-y-2">
@@ -59,11 +101,7 @@ export const InviteMemberModal = ({ isOpen, onClose }: InviteMemberModalProps) =
                                     <Shield className="size-4 text-gray-400" /> Role
                                 </label>
                                 <div className="grid grid-cols-1 gap-2">
-                                    {[
-                                        { id: "admin", title: "Admin", desc: "Can manage all settings and members" },
-                                        { id: "member", title: "Member", desc: "Can view and edit most resources" },
-                                        { id: "viewer", title: "Viewer", desc: "Can only view resources" }
-                                    ].map((r) => (
+                                    {availableRoles.map((r) => (
                                         <button
                                             key={r.id}
                                             onClick={() => setRole(r.id as any)}
@@ -92,8 +130,20 @@ export const InviteMemberModal = ({ isOpen, onClose }: InviteMemberModalProps) =
 
                         {/* Footer */}
                         <div className="p-6 bg-gray-50/50 border-t border-gray-100 flex items-center justify-end gap-3 rounded-b-xl">
-                            <Button variant="secondary" onClick={onClose}>Cancel</Button>
-                            <Button onClick={handleInvite} isDisabled={!email.trim() || !email.includes("@")}>Send Invitation</Button>
+                            <Button variant="secondary" onClick={handleClose}>Cancel</Button>
+                            <Button
+                                onClick={handleInvite}
+                                isDisabled={!email.trim() || !email.includes("@") || isLoading}
+                            >
+                                {isLoading ? (
+                                    <>
+                                        <Loader2 className="size-4 animate-spin mr-2" />
+                                        Adding...
+                                    </>
+                                ) : (
+                                    "Add Member"
+                                )}
+                            </Button>
                         </div>
                     </div>
                 </Dialog>

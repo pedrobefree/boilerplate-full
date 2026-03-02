@@ -24,7 +24,43 @@ interface TaskModalProps {
     onClose: () => void;
 }
 
+import { createNote, getTaskNotes } from "@/app/actions/notes";
+import { updateTask } from "@/app/actions/tasks";
+import { useToast } from "@/components/ui/Toast";
+import { useState, useEffect } from "react";
+
 export const TaskModal = ({ task, isOpen, onClose }: TaskModalProps) => {
+    const [notes, setNotes] = useState<any[]>([]);
+    const [newNote, setNewNote] = useState("");
+    const [isSubmittingNote, setIsSubmittingNote] = useState(false);
+    const { addToast } = useToast();
+
+    useEffect(() => {
+        if (task && isOpen) {
+            getTaskNotes(task.id).then(res => {
+                if (res.success && res.data) {
+                    setNotes(res.data);
+                }
+            });
+        }
+    }, [task, isOpen]);
+
+    const handleAddNote = async () => {
+        if (!task || !newNote.trim()) return;
+
+        setIsSubmittingNote(true);
+        const res = await createNote(task.id, newNote);
+        setIsSubmittingNote(false);
+
+        if (res.success && res.data) {
+            setNotes(prev => [...prev, res.data]);
+            setNewNote("");
+            addToast({ title: "Success", description: "Note added", type: "success" });
+        } else {
+            addToast({ title: "Error", description: "Failed to add note", type: "error" });
+        }
+    };
+
     if (!task) return null;
 
     return (
@@ -33,7 +69,7 @@ export const TaskModal = ({ task, isOpen, onClose }: TaskModalProps) => {
                 <Dialog className="outline-none">
                     <div className="relative">
                         {/* Header */}
-                        <div className="p-6 border-b border-gray-100 pr-16">
+                        <div className="p-6 border-b border-gray-100 pr-16 bg-white rounded-t-xl">
                             <div className="flex items-center gap-3 mb-2">
                                 <Badge
                                     variant={task.priority === "high" ? "error" : task.priority === "medium" ? "warning" : "default"}
@@ -56,7 +92,7 @@ export const TaskModal = ({ task, isOpen, onClose }: TaskModalProps) => {
                         </div>
 
                         {/* Content */}
-                        <div className="p-6 space-y-8 max-h-[70vh] overflow-y-auto">
+                        <div className="p-6 space-y-8 max-h-[70vh] overflow-y-auto bg-white">
                             {/* Meta Info */}
                             <div className="grid grid-cols-2 gap-8">
                                 <div className="space-y-1">
@@ -65,14 +101,14 @@ export const TaskModal = ({ task, isOpen, onClose }: TaskModalProps) => {
                                     </label>
                                     <div className="flex items-center gap-2">
                                         <Avatar src={task.assignee} size="sm" />
-                                        <span className="text-sm font-medium text-gray-700">Olivia Rhye</span>
+                                        <span className="text-sm font-medium text-gray-700">Unassigned</span>
                                     </div>
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-2">
                                         <Clock className="size-3" /> Due Date
                                     </label>
-                                    <span className="text-sm font-medium text-gray-700">{task.dueDate}, 2026</span>
+                                    <span className="text-sm font-medium text-gray-700">{task.dueDate || "No date"}</span>
                                 </div>
                             </div>
 
@@ -82,62 +118,52 @@ export const TaskModal = ({ task, isOpen, onClose }: TaskModalProps) => {
                                     <AlignLeft className="size-4 text-gray-400" /> Description
                                 </h3>
                                 <p className="text-sm text-gray-600 leading-relaxed">
-                                    This task involves reviewing all current UI tokens and ensuring they align with the new design system guidelines.
-                                    We need to check specifically for contrast ratios and consistent naming conventions across all components.
+                                    {task.description || "No description provided."}
                                 </p>
                             </div>
 
-                            {/* Notes */}
-                            <div className="space-y-3">
+                            {/* Notes Section */}
+                            <div className="space-y-4">
                                 <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-                                    <MessageSquare className="size-4 text-gray-400" /> Task Notes
+                                    <MessageSquare className="size-4 text-gray-400" /> Activity & Notes
                                 </h3>
-                                <TextArea
-                                    placeholder="Add a note or update..."
-                                    defaultValue={task.notes}
-                                    className="min-h-[100px] text-sm resize-none"
-                                />
-                                <div className="flex justify-end">
-                                    <Button size="sm">Save Note</Button>
-                                </div>
-                            </div>
 
-                            {/* Activity */}
-                            <div className="space-y-4 pt-4 border-t border-gray-100">
-                                <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-                                    <History className="size-4 text-gray-400" /> Recent Activity
-                                </h3>
-                                <div className="space-y-4">
-                                    <ActivityItem
-                                        user="Olivia Rhye"
-                                        action="moved this task to"
-                                        target="In Progress"
-                                        time="2 hours ago"
+                                <div className="space-y-4 mb-4">
+                                    {notes.length === 0 ? (
+                                        <p className="text-sm text-gray-500 italic">No notes yet.</p>
+                                    ) : (
+                                        notes.map((note) => (
+                                            <div key={note.id} className="flex gap-3 bg-gray-50 p-3 rounded-lg">
+                                                <Avatar src={note.user?.avatar_url} size="xs" />
+                                                <div className="text-sm">
+                                                    <p className="font-bold text-gray-900">{note.user?.full_name || "Unknown User"}</p>
+                                                    <p className="text-gray-700 mt-1">{note.note_body}</p>
+                                                    <p className="text-xs text-gray-400 mt-2">{new Date(note.created_at).toLocaleString()}</p>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+
+                                <div className="space-y-3">
+                                    <TextArea
+                                        placeholder="Add a note or update..."
+                                        value={newNote}
+                                        onChange={setNewNote}
+                                        className="min-h-[80px] text-sm resize-none"
                                     />
-                                    <ActivityItem
-                                        user="Phoenix Baker"
-                                        action="changed priority to"
-                                        target="High"
-                                        time="5 hours ago"
-                                    />
+                                    <div className="flex justify-end">
+                                        <Button size="sm" onClick={handleAddNote} isDisabled={isSubmittingNote || !newNote.trim()}>
+                                            {isSubmittingNote ? "Saving..." : "Save Note"}
+                                        </Button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
 
                         {/* Footer */}
-                        <div className="p-6 bg-gray-50/50 border-t border-gray-100 flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <Button variant="tertiary" size="sm" className="gap-2">
-                                    <Tag className="size-4" /> Labels
-                                </Button>
-                                <Button variant="tertiary" size="sm" className="gap-2">
-                                    <Flag className="size-4" /> Priority
-                                </Button>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                <Button variant="secondary" size="sm" onClick={onClose}>Cancel</Button>
-                                <Button size="sm">Complete Task</Button>
-                            </div>
+                        <div className="p-6 bg-gray-50/50 border-t border-gray-100 flex items-center justify-end gap-3 rounded-b-xl">
+                            <Button variant="secondary" size="sm" onClick={onClose}>Close</Button>
                         </div>
                     </div>
                 </Dialog>

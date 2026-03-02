@@ -209,7 +209,7 @@ export const ProjectDetails = ({ project: initialProject, onBack }: ProjectDetai
                     </Tabs.Panel>
 
                     <Tabs.Panel id="tasks">
-                        <ProjectTasks />
+                        <ProjectTasks projectId={project.id} />
                     </Tabs.Panel>
 
                     <Tabs.Panel id="team">

@@ -30,7 +30,11 @@ export const BrandLogo = ({
 
     // For better DX, we'll try to show the logo if it exists, 
     // but default to a styled text/icon version for the boilerplate.
-    const hasCustomLogo = logo.light && !logo.light.startsWith("/");
+    const hasCustomLogo = Boolean(logo.light);
+
+    // Only apply the BRAND_CONFIG 'name' if the logo files path are empty
+    // This allows the custom logo (which usually includes the name) to stand alone without duplicate text
+    const shouldShowText = showText && !hasCustomLogo;
 
     const content = (
         <div className={cx("flex items-center gap-2.5 font-bold tracking-tight shrink-0", className)}>
@@ -45,7 +49,7 @@ export const BrandLogo = ({
                     <UntitledUiLogoMinimal className="h-full w-full text-brand-600" />
                 )}
             </div>
-            {showText && (
+            {shouldShowText && (
                 <span className={cx(
                     "text-gray-900 whitespace-nowrap",
                     size === "sm" ? "text-lg" : size === "md" ? "text-xl" : "text-2xl"

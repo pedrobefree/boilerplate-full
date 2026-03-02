@@ -3,7 +3,7 @@
  */
 
 export const APP_CONFIG = {
-    name: "Befree Boilerplate",
+    name: "Our First App",
     description: "A premium Next.js-inspired boilerplate using Untitled UI and Tailwind CSS.",
     version: "1.0.0",
 };
@@ -11,12 +11,12 @@ export const APP_CONFIG = {
 export const BRAND_CONFIG = {
     name: "Befree",
     logo: {
-        light: "/logo-light.svg",
-        dark: "/logo-dark.svg",
-        icon: "/icon.svg",
+        light: "/logo-blue.png",
+        dark: "/logo-highlight.png",
+        icon: "/favicon-befree.png",
     },
     theme: {
-        primaryColor: "#4146F6", // Brand primary color
+        primaryColor: "#4146f6", // Brand primary color
     },
 };
 

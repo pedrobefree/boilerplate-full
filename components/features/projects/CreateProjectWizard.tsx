@@ -1,12 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Check, ArrowRight, ArrowLeft, Target, Calendar, Users, Rocket, Info } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { TextArea } from "@/components/ui/Textarea";
 import { Card, CardContent } from "@/components/ui/Card";
 import { cx } from "@/lib/utils";
+import { getMyOrganizations } from "@/app/actions/organizations";
+import { createProject } from "@/app/actions/projects";
+import { useToast } from "@/components/ui/Toast";
 
 interface CreateProjectWizardProps {
     onClose: () => void;
@@ -15,6 +18,9 @@ interface CreateProjectWizardProps {
 
 export const CreateProjectWizard = ({ onClose, onComplete }: CreateProjectWizardProps) => {
     const [step, setStep] = useState(1);
+    const [isLoading, setIsLoading] = useState(false);
+    const [orgId, setOrgId] = useState<string>("");
+    const { addToast } = useToast();
     const [formData, setFormData] = useState({
         name: "",
         description: "",
@@ -23,11 +29,48 @@ export const CreateProjectWizard = ({ onClose, onComplete }: CreateProjectWizard
         visibility: "team"
     });
 
+    // Fetch organizations on mount
+
+
+    useEffect(() => {
+        getMyOrganizations().then(res => {
+            if (res.success && res.data && res.data.length > 0) {
+                setOrgId(res.data[0].id);
+            }
+        });
+    }, []);
+
     const totalSteps = 3;
 
-    const handleNext = () => {
-        if (step < totalSteps) setStep(step + 1);
-        else onComplete(formData);
+    const handleNext = async () => {
+        if (step < totalSteps) {
+            setStep(step + 1);
+            return;
+        }
+
+        // Final step: Create Project
+        if (!orgId) {
+            addToast({ title: "Error", description: "No organization found.", type: "error" });
+            return;
+        }
+
+        setIsLoading(true);
+        const res = await createProject({
+            organizationId: orgId,
+            name: formData.name,
+            description: formData.description,
+            keyObjective: formData.goal,
+            deadline: formData.deadline,
+            isPrivate: formData.visibility === "private"
+        });
+        setIsLoading(false);
+
+        if (res.success) {
+            addToast({ title: "Success", description: "Project created successfully!", type: "success" });
+            onComplete(res.data);
+        } else {
+            addToast({ title: "Error", description: res.error || "Failed to create project", type: "error" });
+        }
     };
 
     const handleBack = () => {
@@ -173,16 +216,16 @@ export const CreateProjectWizard = ({ onClose, onComplete }: CreateProjectWizard
 
                 {/* Footer */}
                 <div className="p-8 border-t border-gray-100 flex items-center justify-between bg-white bg-opacity-80 backdrop-blur-sm">
-                    <Button variant="tertiary" onClick={onClose}>Cancel</Button>
+                    <Button variant="tertiary" onClick={onClose} isDisabled={isLoading}>Cancel</Button>
                     <div className="flex gap-3">
                         {step > 1 && (
-                            <Button variant="secondary" onClick={handleBack} className="gap-2">
+                            <Button variant="secondary" onClick={handleBack} className="gap-2" isDisabled={isLoading}>
                                 <ArrowLeft className="size-4" /> Back
                             </Button>
                         )}
-                        <Button onClick={handleNext} className="gap-2 min-w-[120px]">
-                            {step === totalSteps ? "Create Project" : "Next step"}
-                            {step < totalSteps && <ArrowRight className="size-4" />}
+                        <Button onClick={handleNext} className="gap-2 min-w-[120px]" isDisabled={isLoading || (step === 1 && !formData.name.trim())}>
+                            {isLoading ? "Creating..." : step === totalSteps ? "Create Project" : "Next step"}
+                            {step < totalSteps && !isLoading && <ArrowRight className="size-4" />}
                         </Button>
                     </div>
                 </div>

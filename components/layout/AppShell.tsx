@@ -1,6 +1,8 @@
+"use client";
+
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { BarChart2, Users, Settings, Search, LayoutGrid, Inbox, LifeBuoy } from "lucide-react"
+import { BarChart2, Users, Settings, Search, LayoutGrid, Inbox, LifeBuoy, Building, ShoppingBag } from "lucide-react"
 import { NavList, NavAccountCard, MobileNavigationHeader } from "./navigation/SidebarNavigation"
 import type { NavItemType } from "./navigation/NavList"
 import { Badge } from "@/components/ui/Badge"
@@ -12,8 +14,9 @@ import { CreateProjectWizard } from "../features/projects/CreateProjectWizard"
 import { Modal, ModalOverlay, Dialog } from "@/components/ui/Modal"
 import { BrandLogo } from "@/components/ui/BrandLogo"
 import { RouterProvider } from "react-aria-components";
+import { useIsSuperAdmin } from "@/hooks/use-admin";
 
-const navigation: (NavItemType & { view: string })[] = [
+const baseNavigation: (NavItemType & { view: string })[] = [
     { label: "Dashboard", href: "/dashboard", view: "dashboard", icon: LayoutGrid },
     { label: "Projects", href: "/projects", view: "projects", icon: BarChart2 },
     { label: "Users", href: "/users", view: "users", icon: Users },
@@ -31,6 +34,30 @@ interface AppShellProps {
 export function AppShell({ children, currentView, onViewChange }: AppShellProps) {
     const router = useRouter();
     const [isWizardOpen, setIsWizardOpen] = React.useState(false);
+    const { isAdmin } = useIsSuperAdmin();
+
+    const navigation = React.useMemo(() => {
+        const nav = [
+            ...baseNavigation,
+            // Catalog menu for all users (accessible to all roles except customer)
+            {
+                label: "Catalog",
+                icon: ShoppingBag,
+                items: [
+                    { label: "Products", href: "/admin/catalog/products" },
+                    { label: "Categories", href: "/admin/catalog/categories" },
+                    { label: "Tags", href: "/admin/catalog/tags" },
+                ]
+            } as any
+        ];
+
+        // Add Organizations menu only for super admins
+        if (isAdmin) {
+            nav.push({ label: "Organizations", href: "/admin/organizations", view: "organizations", icon: Building });
+        }
+
+        return nav;
+    }, [isAdmin]);
 
     React.useEffect(() => {
         const handleOpenWizard = () => setIsWizardOpen(true);
@@ -105,7 +132,7 @@ export function AppShell({ children, currentView, onViewChange }: AppShellProps)
                             </div>
                         </div>
                     </div>
-                    <div className="p-4 lg:p-12 max-w-7xl mx-auto w-full">
+                    <div className="p-4 lg:p-12 w-full">
                         {children}
                     </div>
                 </main>

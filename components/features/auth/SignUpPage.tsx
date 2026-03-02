@@ -1,25 +1,64 @@
 "use client";
 
-import React, { useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { UntitledUiLogo } from "@/components/ui/logos";
 import { SocialIcon } from "@/components/ui/social-icons";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { createOrganization } from "@/app/actions/organizations";
+import { acceptInvitation, getInvitationByToken } from "@/app/actions/invitations";
 import { useToast } from "@/components/ui/Toast";
+import { Building, Loader2 } from "lucide-react";
 
 export const SignUpPage = () => {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const inviteToken = searchParams.get("invite");
+
     const [isLoading, setIsLoading] = useState(false);
+    const [isLoadingInvite, setIsLoadingInvite] = useState(!!inviteToken);
     const [error, setError] = useState<string | null>(null);
+    const [inviteData, setInviteData] = useState<{
+        email: string;
+        orgName: string;
+        role: string;
+        logoUrl?: string | null;
+    } | null>(null);
     const { addToast } = useToast();
     const [formData, setFormData] = useState({
         fullName: "",
         email: "",
         password: "",
     });
+
+    // Load invitation data if invite token is present
+    useEffect(() => {
+        if (inviteToken) {
+            const loadInvite = async () => {
+                try {
+                    const result = await getInvitationByToken(inviteToken);
+                    if (result.success && result.data) {
+                        setInviteData({
+                            email: result.data.email,
+                            orgName: result.data.organization?.name || "a team",
+                            role: result.data.role,
+                            logoUrl: result.data.organization?.logo_url,
+                        });
+                        setFormData(prev => ({ ...prev, email: result.data!.email }));
+                    } else {
+                        setError("This invitation is invalid or has expired.");
+                    }
+                } catch (err) {
+                    setError("Failed to load invitation.");
+                } finally {
+                    setIsLoadingInvite(false);
+                }
+            };
+            loadInvite();
+        }
+    }, [inviteToken]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setFormData(prev => ({
@@ -51,18 +90,42 @@ export const SignUpPage = () => {
             if (signUpError) throw signUpError;
 
             if (authData.user) {
-                // 2. Create a default organization for the new user
-                // We do this via server action to ensure membership is created correctly
-                const orgName = `${formData.fullName}'s Team`;
-                const orgSlug = formData.fullName.toLowerCase().replace(/\s+/g, '-') + '-' + Math.random().toString(36).substring(2, 7);
+                if (inviteToken && inviteData) {
+                    // Accept the invitation - adds user to the organization
+                    const acceptResult = await acceptInvitation(inviteToken);
 
-                await createOrganization(orgName, orgSlug);
+                    if (acceptResult.success) {
+                        addToast({
+                            title: "Welcome to " + inviteData.orgName + "!",
+                            description: "Your account has been created and you've joined the team.",
+                            type: "success",
+                        });
+                    } else {
+                        // Still created account, but invitation acceptance failed
+                        // Create a default org as fallback
+                        const orgName = `${formData.fullName}'s Team`;
+                        const orgSlug = formData.fullName.toLowerCase().replace(/\s+/g, '-') + '-' + Math.random().toString(36).substring(2, 7);
+                        await createOrganization(orgName, orgSlug);
 
-                addToast({
-                    title: "Account created!",
-                    description: "Your account and workspace are ready.",
-                    type: "success",
-                });
+                        addToast({
+                            title: "Account created!",
+                            description: "There was an issue with the invitation, but your account is ready.",
+                            type: "warning",
+                        });
+                    }
+                } else {
+                    // No invite - create a default organization for the new user
+                    const orgName = `${formData.fullName}'s Team`;
+                    const orgSlug = formData.fullName.toLowerCase().replace(/\s+/g, '-') + '-' + Math.random().toString(36).substring(2, 7);
+
+                    await createOrganization(orgName, orgSlug);
+
+                    addToast({
+                        title: "Account created!",
+                        description: "Your account and workspace are ready.",
+                        type: "success",
+                    });
+                }
 
                 router.push("/dashboard");
             }
@@ -81,13 +144,25 @@ export const SignUpPage = () => {
 
     const handleSocialLogin = async (provider: 'google' | 'facebook' | 'twitter') => {
         const supabase = createClient();
+        const redirectUrl = inviteToken
+            ? `${window.location.origin}/auth/callback?invite=${inviteToken}`
+            : `${window.location.origin}/auth/callback`;
+
         await supabase.auth.signInWithOAuth({
             provider,
             options: {
-                redirectTo: `${window.location.origin}/auth/callback`,
+                redirectTo: redirectUrl,
             },
         });
     };
+
+    if (isLoadingInvite) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-white">
+                <Loader2 className="size-8 animate-spin text-brand-600" />
+            </div>
+        );
+    }
 
     return (
         <div className="flex min-h-screen bg-white">
@@ -96,13 +171,41 @@ export const SignUpPage = () => {
                 <div className="mx-auto w-full max-w-sm lg:w-96">
                     <div>
                         <UntitledUiLogo className="h-8 w-auto text-brand-600" />
-                        <h2 className="mt-6 text-3xl font-bold tracking-tight text-gray-900">Create an account</h2>
-                        <p className="mt-2 text-sm text-gray-600">
-                            Already have an account?{" "}
-                            <a href="/login" className="font-medium text-brand-600 hover:text-brand-500">
-                                Log in
-                            </a>
-                        </p>
+
+                        {inviteData ? (
+                            <div className="flex flex-col items-center justify-center text-center">
+                                {inviteData.logoUrl ? (
+                                    <img
+                                        src={inviteData.logoUrl}
+                                        alt={inviteData.orgName}
+                                        className="h-12 w-auto mb-6 rounded-lg shadow-sm"
+                                    />
+                                ) : (
+                                    <div className="size-12 rounded-xl bg-brand-600 flex items-center justify-center text-white font-bold text-xl shadow-lg mb-6">
+                                        {inviteData.orgName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                                    </div>
+                                )}
+                                <h2 className="text-3xl font-bold tracking-tight text-gray-900 leading-tight">
+                                    Join {inviteData.orgName}
+                                </h2>
+                                <div className="mt-4 flex items-center gap-2 px-4 py-2 bg-brand-50 rounded-full border border-brand-100">
+                                    <Building className="size-4 text-brand-600" />
+                                    <span className="text-sm font-medium text-brand-700">
+                                        Invited as <span className="capitalize">{inviteData.role}</span>
+                                    </span>
+                                </div>
+                            </div>
+                        ) : (
+                            <>
+                                <h2 className="mt-6 text-3xl font-bold tracking-tight text-gray-900">Create an account</h2>
+                                <p className="mt-2 text-sm text-gray-600">
+                                    Already have an account?{" "}
+                                    <a href="/login" className="font-medium text-brand-600 hover:text-brand-500">
+                                        Log in
+                                    </a>
+                                </p>
+                            </>
+                        )}
                     </div>
 
                     <div className="mt-8">
@@ -132,6 +235,7 @@ export const SignUpPage = () => {
                                     value={formData.email}
                                     onChange={handleChange}
                                     required
+                                    disabled={!!inviteData}
                                 />
 
                                 <Input
@@ -151,7 +255,7 @@ export const SignUpPage = () => {
                                         className="w-full justify-center"
                                         isDisabled={isLoading}
                                     >
-                                        {isLoading ? "Creating account..." : "Get started"}
+                                        {isLoading ? "Creating account..." : inviteData ? "Create Account & Join" : "Get started"}
                                     </Button>
                                 </div>
                             </form>

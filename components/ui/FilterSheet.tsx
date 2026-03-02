@@ -11,9 +11,11 @@ import { cx } from "@/lib/utils";
 interface FilterSheetProps {
     children: React.ReactNode;
     trigger: React.ReactNode;
+    onClearAll?: () => void;
+    onApply?: () => void;
 }
 
-export const FilterSheet = ({ children, trigger }: FilterSheetProps) => {
+export const FilterSheet = ({ children, trigger, onClearAll, onApply }: FilterSheetProps) => {
     return (
         <AriaDialogTrigger>
             {trigger}
@@ -55,14 +57,20 @@ export const FilterSheet = ({ children, trigger }: FilterSheetProps) => {
                                 </div>
                                 <div className="p-6 border-t border-gray-100 flex gap-3">
                                     <AriaButton
-                                        onPress={close}
-                                        className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+                                        onPress={() => {
+                                            onClearAll?.();
+                                            close();
+                                        }}
+                                        className="flex-1 px-4 py-2.5 bg-white text-gray-700 border border-gray-300 rounded-lg font-semibold text-sm hover:bg-gray-50 transition-colors shadow-sm"
                                     >
                                         Clear All
                                     </AriaButton>
                                     <AriaButton
-                                        onPress={close}
-                                        className="flex-1 px-4 py-2 bg-brand-600 text-white rounded-lg font-medium hover:bg-brand-700 transition-colors"
+                                        onPress={() => {
+                                            onApply?.();
+                                            close();
+                                        }}
+                                        className="flex-1 px-4 py-2.5 bg-brand-600 text-white rounded-lg font-semibold text-sm hover:bg-brand-700 transition-colors shadow-sm"
                                     >
                                         Apply Filters
                                     </AriaButton>

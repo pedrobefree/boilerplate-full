@@ -9,7 +9,10 @@ import { withErrorHandling } from "@/lib/supabase/errors";
  */
 export interface ProfileUpdateParams {
     full_name?: string;
+    first_name?: string;
+    last_name?: string;
     avatar_url?: string;
+    bio?: string;
 }
 
 /**
@@ -56,6 +59,18 @@ export async function updateMyProfile(updates: ProfileUpdateParams) {
         // 2. Input Validation (Fail Fast)
         if (updates.full_name && updates.full_name.trim().length < 2) {
             throw new Error("Full name must be at least 2 characters.");
+        }
+
+        if (updates.first_name && updates.first_name.trim().length < 1) {
+            throw new Error("First name is required.");
+        }
+
+        if (updates.last_name && updates.last_name.trim().length < 1) {
+            throw new Error("Last name is required.");
+        }
+
+        if (updates.bio && updates.bio.length > 500) {
+            throw new Error("Bio exceeds max length of 500 characters.");
         }
 
         // 3. Database Update

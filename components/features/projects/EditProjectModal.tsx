@@ -19,16 +19,34 @@ interface EditProjectModalProps {
     onSave: (data: any) => void;
 }
 
+import { updateProject } from "@/app/actions/projects";
+import { useToast } from "@/components/ui/Toast";
+
 export const EditProjectModal = ({ isOpen, onClose, project, onSave }: EditProjectModalProps) => {
     const [formData, setFormData] = useState({
         name: project.name,
         description: project.description,
         status: project.status
     });
+    const [isLoading, setIsLoading] = useState(false);
+    const { addToast } = useToast();
 
-    const handleSave = () => {
-        onSave(formData);
-        onClose();
+    const handleSave = async () => {
+        setIsLoading(true);
+        const res = await updateProject(project.id, {
+            name: formData.name,
+            description: formData.description,
+            status: formData.status
+        });
+        setIsLoading(false);
+
+        if (res.success) {
+            addToast({ title: "Success", description: "Project updated successfully", type: "success" });
+            onSave(formData); // Update parent state
+            onClose();
+        } else {
+            addToast({ title: "Error", description: res.error || "Failed to update project", type: "error" });
+        }
     };
 
     return (

@@ -3,9 +3,9 @@
 @import "./brand.css";
 @import "./typography.css";
 
-@plugin "@tailwindcss/typography";
+/* @plugin "@tailwindcss/typography";
 @plugin "tailwindcss-react-aria-components";
-@plugin "tailwindcss-animate";
+@plugin "tailwindcss-animate"; */
 
 @custom-variant dark (&:where(.dark-mode, .dark-mode *));
 @custom-variant label (& [data-label]);

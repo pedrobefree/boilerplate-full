@@ -1,3 +1,5 @@
+"use client";
+
 import { Plus, Search, Filter, MoreVertical, Users, Calendar, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Button as AriaButton } from "react-aria-components";
@@ -20,86 +22,34 @@ interface Project {
     category: string;
 }
 
-const mockProjects: Project[] = [
-    {
-        id: "1",
-        name: "Website Redesign",
-        description: "Complete overhaul of company website with modern UI/UX",
-        status: "active",
-        progress: 65,
-        team: ["/api/placeholder/32/32", "/api/placeholder/32/32", "/api/placeholder/32/32"],
-        deadline: "Mar 15, 2026",
-        priority: "high",
-        category: "Design"
-    },
-    {
-        id: "2",
-        name: "Mobile App Development",
-        description: "Native iOS and Android app for customer engagement",
-        status: "active",
-        progress: 42,
-        team: ["/api/placeholder/32/32", "/api/placeholder/32/32", "/api/placeholder/32/32", "/api/placeholder/32/32"],
-        deadline: "Apr 30, 2026",
-        priority: "high",
-        category: "Development"
-    },
-    {
-        id: "3",
-        name: "API Integration",
-        description: "Third-party API integration for payment processing",
-        status: "active",
-        progress: 88,
-        team: ["/api/placeholder/32/32", "/api/placeholder/32/32"],
-        deadline: "Feb 28, 2026",
-        priority: "medium",
-        category: "Development"
-    },
-    {
-        id: "4",
-        name: "Database Migration",
-        description: "Migrate legacy database to modern cloud infrastructure",
-        status: "on-hold",
-        progress: 25,
-        team: ["/api/placeholder/32/32", "/api/placeholder/32/32", "/api/placeholder/32/32"],
-        deadline: "May 15, 2026",
-        priority: "low",
-        category: "Infrastructure"
-    },
-    {
-        id: "5",
-        name: "Security Audit",
-        description: "Comprehensive security review and penetration testing",
-        status: "completed",
-        progress: 100,
-        team: ["/api/placeholder/32/32", "/api/placeholder/32/32"],
-        deadline: "Jan 31, 2026",
-        priority: "high",
-        category: "Security"
-    },
-    {
-        id: "6",
-        name: "Customer Portal",
-        description: "Self-service portal for customer account management",
-        status: "active",
-        progress: 55,
-        team: ["/api/placeholder/32/32", "/api/placeholder/32/32", "/api/placeholder/32/32"],
-        deadline: "Mar 30, 2026",
-        priority: "medium",
-        category: "Product"
-    }
-];
+interface ProjectsPageProps {
+    initialProjects?: any[];
+}
 
-export const ProjectsPage = () => {
+export const ProjectsPage = ({ initialProjects = [] }: ProjectsPageProps) => {
     const [searchQuery, setSearchQuery] = useState("");
     const [statusFilter, setStatusFilter] = useState<string>("all");
     const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+
+    // Map backend data to UI model
+    const projects: Project[] = initialProjects.map(p => ({
+        id: p.id,
+        name: p.name,
+        description: p.description || "",
+        status: p.status === "inactive" || p.status === "canceled" ? "on-hold" : (p.status || "active"),
+        progress: 0, // TODO: Calculate from tasks
+        team: p.members ? p.members.map((m: any) => m.profile?.avatar_url || "/api/placeholder/32/32") : [],
+        deadline: p.deadline ? new Date(p.deadline).toLocaleDateString() : "No deadline",
+        priority: "medium", // Default as per schema limitations
+        category: "General"
+    }));
 
     // If a project is selected, show the detail view
     if (selectedProject) {
         return <ProjectDetails project={selectedProject} onBack={() => setSelectedProject(null)} />;
     }
 
-    const filteredProjects = mockProjects.filter(project => {
+    const filteredProjects = projects.filter(project => {
         const matchesSearch = project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
             project.description.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesStatus = statusFilter === "all" || project.status === statusFilter;
@@ -214,7 +164,7 @@ export const ProjectsPage = () => {
                             <div>
                                 <p className="text-sm text-gray-500">Active Projects</p>
                                 <p className="text-2xl font-bold text-gray-900 mt-1">
-                                    {mockProjects.filter(p => p.status === "active").length}
+                                    {projects.filter(p => p.status === "active").length}
                                 </p>
                             </div>
                             <div className="h-12 w-12 bg-success-50 rounded-lg flex items-center justify-center">
@@ -229,7 +179,7 @@ export const ProjectsPage = () => {
                             <div>
                                 <p className="text-sm text-gray-500">On Hold</p>
                                 <p className="text-2xl font-bold text-gray-900 mt-1">
-                                    {mockProjects.filter(p => p.status === "on-hold").length}
+                                    {projects.filter(p => p.status === "on-hold").length}
                                 </p>
                             </div>
                             <div className="h-12 w-12 bg-warning-50 rounded-lg flex items-center justify-center">
@@ -244,7 +194,7 @@ export const ProjectsPage = () => {
                             <div>
                                 <p className="text-sm text-gray-500">Completed</p>
                                 <p className="text-2xl font-bold text-gray-900 mt-1">
-                                    {mockProjects.filter(p => p.status === "completed").length}
+                                    {projects.filter(p => p.status === "completed").length}
                                 </p>
                             </div>
                             <div className="h-12 w-12 bg-gray-100 rounded-lg flex items-center justify-center">

@@ -5,25 +5,60 @@ import { Button } from "@/components/ui/Button";
 import { Modal, ModalOverlay, Dialog } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { TextArea } from "@/components/ui/Textarea";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cx } from "@/lib/utils";
+
+import { createTask } from "@/app/actions/tasks";
+import { useToast } from "@/components/ui/Toast";
 
 interface CreateTaskModalProps {
     isOpen: boolean;
     onClose: () => void;
+    projectId: string;
     initialStatus?: "todo" | "in-progress" | "done";
+    onTaskCreated?: () => void;
 }
 
-export const CreateTaskModal = ({ isOpen, onClose, initialStatus = "todo" }: CreateTaskModalProps) => {
+export const CreateTaskModal = ({ isOpen, onClose, projectId, initialStatus = "todo", onTaskCreated }: CreateTaskModalProps) => {
     const [title, setTitle] = useState("");
     const [description, setDescription] = useState("");
     const [status, setStatus] = useState(initialStatus);
     const [priority, setPriority] = useState<"low" | "medium" | "high">("medium");
+    const [dueDate, setDueDate] = useState("");
+    const [isLoading, setIsLoading] = useState(false);
+    const { addToast } = useToast();
 
-    const handleSave = () => {
-        // In a real app, this would call an API
-        console.log("Saving task:", { title, description, status, priority });
-        onClose();
+    // Reset status when modal opens/changes
+    useEffect(() => {
+        if (isOpen) {
+            setStatus(initialStatus);
+        }
+    }, [isOpen, initialStatus]);
+
+    const handleSave = async () => {
+        setIsLoading(true);
+        const res = await createTask({
+            projectId,
+            title,
+            description,
+            status,
+            priority,
+            dueDate: dueDate || undefined,
+            assigneeId: undefined // TODO: Handle assignee
+        });
+        setIsLoading(false);
+
+        if (res.success) {
+            addToast({ title: "Success", description: "Task created successfully", type: "success" });
+            if (onTaskCreated) onTaskCreated();
+            // Reset form
+            setTitle("");
+            setDescription("");
+            setDueDate("");
+            onClose();
+        } else {
+            addToast({ title: "Error", description: res.error || "Failed to create task", type: "error" });
+        }
     };
 
     return (
@@ -116,7 +151,7 @@ export const CreateTaskModal = ({ isOpen, onClose, initialStatus = "todo" }: Cre
                                     <label className="text-sm font-bold text-gray-700 flex items-center gap-2">
                                         <Calendar className="size-4 text-gray-400" /> Due Date
                                     </label>
-                                    <Input type="date" className="h-10" />
+                                    <Input type="date" className="h-10" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-sm font-bold text-gray-700 flex items-center gap-2">

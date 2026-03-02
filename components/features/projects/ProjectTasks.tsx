@@ -1,6 +1,4 @@
-"use client";
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { List, LayoutGrid, Plus, Search, MoreHorizontal, Clock } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -10,6 +8,8 @@ import { Avatar } from "@/components/ui/Avatar";
 import { cx } from "@/lib/utils";
 import { TaskModal } from "./TaskModal";
 import { CreateTaskModal } from "./CreateTaskModal";
+import { getProjectTasks, updateTaskStatus } from "@/app/actions/tasks";
+import { useToast } from "@/components/ui/Toast";
 
 interface Task {
     id: string;
@@ -22,21 +22,37 @@ interface Task {
     notes?: string;
 }
 
-const initialTasks: Task[] = [
-    { id: "1", title: "Finalize UI Kit tokens", status: "in-progress", priority: "high", dueDate: "Feb 10", assignee: "https://images.unsplash.com/photo-1494790108377-be9c29b29330", notes: "Check contrast ratios for all primary colors." },
-    { id: "2", title: "Review documentation with stakeholders", status: "todo", priority: "medium", dueDate: "Feb 12", assignee: "https://images.unsplash.com/photo-1519244703995-f4e0f30006d5" },
-    { id: "3", title: "Fix responsive alignment bugs", status: "todo", priority: "low", dueDate: "Feb 15", assignee: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d" },
-    { id: "4", title: "Implement API authentication", status: "done", priority: "high", dueDate: "Jan 25", assignee: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e" },
-    { id: "5", title: "Design system audit", status: "in-progress", priority: "medium", dueDate: "Feb 20", assignee: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80" },
-];
-
-export const ProjectTasks = () => {
+export const ProjectTasks = ({ projectId }: { projectId: string }) => {
     const [view, setView] = useState<"list" | "kanban">("kanban");
     const [search, setSearch] = useState("");
-    const [tasks, setTasks] = useState<Task[]>(initialTasks);
+    const [tasks, setTasks] = useState<Task[]>([]);
     const [selectedTask, setSelectedTask] = useState<Task | null>(null);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [createModalInitialStatus, setCreateModalInitialStatus] = useState<Task["status"]>("todo");
+    const { addToast } = useToast();
+
+    const fetchTasks = () => {
+        if (projectId) {
+            getProjectTasks(projectId).then(res => {
+                if (res.success && res.data) {
+                    setTasks(res.data.map((t: any) => ({
+                        id: t.id,
+                        title: t.title,
+                        status: t.status,
+                        priority: t.priority,
+                        dueDate: t.due_date ? new Date(t.due_date).toLocaleDateString() : "",
+                        assignee: t.assignee?.avatar_url || "",
+                        description: t.description || "",
+                        notes: ""
+                    })));
+                }
+            });
+        }
+    };
+
+    useEffect(() => {
+        fetchTasks();
+    }, [projectId]);
 
     const filteredTasks = tasks.filter(t => t.title.toLowerCase().includes(search.toLowerCase()));
 
@@ -44,10 +60,19 @@ export const ProjectTasks = () => {
         e.dataTransfer.setData("taskId", taskId);
     };
 
-    const handleDrop = (e: React.DragEvent, status: Task["status"]) => {
+    const handleDrop = async (e: React.DragEvent, status: Task["status"]) => {
         e.preventDefault();
         const taskId = e.dataTransfer.getData("taskId");
+
+        // Optimistic update
         setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status } : t));
+
+        const res = await updateTaskStatus(taskId, status);
+        if (!res.success) {
+            // Revert on failure
+            addToast({ title: "Error", description: "Failed to update task status", type: "error" });
+            // TODO: refetch or revert
+        }
     };
 
     const handleDragOver = (e: React.DragEvent) => {
@@ -159,7 +184,25 @@ export const ProjectTasks = () => {
             <CreateTaskModal
                 isOpen={isCreateModalOpen}
                 onClose={() => setIsCreateModalOpen(false)}
+                projectId={projectId}
                 initialStatus={createModalInitialStatus}
+                onTaskCreated={() => {
+                    // Refresh tasks
+                    getProjectTasks(projectId).then(res => {
+                        if (res.success && res.data) {
+                            setTasks(res.data.map((t: any) => ({
+                                id: t.id,
+                                title: t.title,
+                                status: t.status,
+                                priority: t.priority,
+                                dueDate: t.due_date ? new Date(t.due_date).toLocaleDateString() : "",
+                                assignee: t.assignee?.avatar_url || "",
+                                description: t.description || "",
+                                notes: ""
+                            })));
+                        }
+                    });
+                }}
             />
         </div>
     );

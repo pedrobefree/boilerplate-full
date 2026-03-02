@@ -2,6 +2,9 @@
 
 import { AppShell } from "@/components/layout/AppShell";
 import { usePathname } from "next/navigation";
+import { OrganizationProvider } from "@/app/context/OrganizationContext";
+
+import { PendingInvitesModal } from "@/components/features/dashboard/PendingInvitesModal";
 
 /**
  * Dashboard Layout
@@ -18,8 +21,11 @@ export default function DashboardLayout({
     const currentView = pathname.split("/").pop() || "dashboard";
 
     return (
-        <AppShell currentView={currentView}>
-            {children}
-        </AppShell>
+        <OrganizationProvider>
+            <AppShell currentView={currentView}>
+                {children}
+            </AppShell>
+            <PendingInvitesModal />
+        </OrganizationProvider>
     );
 }

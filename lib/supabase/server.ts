@@ -34,3 +34,20 @@ export const createClient = async () => {
         }
     );
 };
+
+/**
+ * Creates a Supabase client with Service Role access.
+ * WARNING: This bypasses Row Level Security. Use only for admin tasks.
+ */
+export const createSystemClient = () => {
+    return createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        {
+            cookies: {
+                getAll() { return [] },
+                setAll() { }
+            }
+        }
+    );
+};
