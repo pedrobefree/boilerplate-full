@@ -7,8 +7,13 @@ import { MetricCard } from "@/components/ui/MetricCard";
 import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 
+import dynamic from "next/dynamic";
 import { ActiveProjectsCard } from "./ActiveProjectsCard";
-import { RevenueChart } from "../charts/RevenueChart";
+
+const RevenueChart = dynamic(
+    () => import("../charts/RevenueChart").then((mod) => ({ default: mod.RevenueChart })),
+    { ssr: false }
+);
 
 import { useAuth } from "@/components/features/auth/AuthProvider";
 
