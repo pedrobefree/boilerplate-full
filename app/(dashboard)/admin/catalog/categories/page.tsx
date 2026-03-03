@@ -5,7 +5,7 @@ export default async function CategoriesPage() {
     const categories = await getCategories();
 
     return (
-        <div className="py-8">
+        <div>
             <CategoryList categories={categories} />
         </div>
     );

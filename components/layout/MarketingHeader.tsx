@@ -5,8 +5,11 @@ import { Button } from "@/components/ui/Button";
 import { BrandLogo } from "@/components/ui/BrandLogo";
 import { Menu, X } from "lucide-react";
 import { useState } from "react";
+import { ShoppingBag } from "lucide-react";
+import { useCart } from "@/app/context/CartContext";
 
 export const MarketingHeader = () => {
+    const { totalItems, setIsCartOpen } = useCart();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
     const toggleMenu = () => setIsMobileMenuOpen(!isMobileMenuOpen);
@@ -27,6 +30,18 @@ export const MarketingHeader = () => {
 
                     {/* Auth Buttons */}
                     <div className="hidden md:flex items-center gap-4">
+                        <button
+                            onClick={() => setIsCartOpen(true)}
+                            className="relative p-2 text-gray-600 hover:text-gray-900 transition-colors"
+                            aria-label="Open cart"
+                        >
+                            <ShoppingBag className="w-5 h-5" />
+                            {totalItems > 0 && (
+                                <span className="absolute top-0 right-0 inline-flex items-center justify-center w-4 h-4 text-[10px] font-bold text-white bg-brand-600 rounded-full transform translate-x-1 -translate-y-1">
+                                    {totalItems}
+                                </span>
+                            )}
+                        </button>
                         <Link href="/login">
                             <Button variant="tertiary" className="text-gray-600 hover:text-gray-900">
                                 Log in
@@ -38,13 +53,27 @@ export const MarketingHeader = () => {
                     </div>
 
                     {/* Mobile Menu Button */}
-                    <button
-                        className="md:hidden p-2 text-gray-600"
-                        onClick={toggleMenu}
-                        aria-label="Toggle menu"
-                    >
-                        {isMobileMenuOpen ? <X /> : <Menu />}
-                    </button>
+                    <div className="flex md:hidden items-center gap-3">
+                        <button
+                            onClick={() => setIsCartOpen(true)}
+                            className="relative p-2 text-gray-600 hover:text-gray-900 transition-colors"
+                            aria-label="Open cart"
+                        >
+                            <ShoppingBag className="w-5 h-5" />
+                            {totalItems > 0 && (
+                                <span className="absolute top-0 right-0 inline-flex items-center justify-center w-4 h-4 text-[10px] font-bold text-white bg-brand-600 rounded-full transform translate-x-1 -translate-y-1">
+                                    {totalItems}
+                                </span>
+                            )}
+                        </button>
+                        <button
+                            className="p-2 text-gray-600"
+                            onClick={toggleMenu}
+                            aria-label="Toggle menu"
+                        >
+                            {isMobileMenuOpen ? <X /> : <Menu />}
+                        </button>
+                    </div>
                 </div>
             </div>
 

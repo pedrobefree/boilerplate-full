@@ -5,7 +5,7 @@ export default async function ProductsPage() {
     const products = await getProducts();
 
     return (
-        <div className="py-8">
+        <div>
             <ProductList products={products} />
         </div>
     );

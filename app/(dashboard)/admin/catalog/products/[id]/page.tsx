@@ -20,7 +20,7 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
     }
 
     return (
-        <div className="max-w-6xl py-8">
+        <div>
             <ProductForm
                 categories={categories}
                 tags={tags}

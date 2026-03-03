@@ -77,7 +77,7 @@ const Content = ({ children, className }: { children: ReactNode; className?: str
 );
 
 const Footer = ({ children, className }: { children: ReactNode; className?: string }) => (
-    <div className={cx("flex flex-none flex-col gap-3 border-t border-secondary p-4 sm:flex-row sm:justify-between sm:p-6", className)}>
+    <div className={cx("flex flex-none flex-col gap-3 border-t border-secondary p-4 sm:flex-column sm:justify-between sm:p-6", className)}>
         {children}
     </div>
 );

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { ShoppingBag, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useCart } from "@/app/context/CartContext";
 
 interface ProductViewProps {
     product: ProductWithDetails;
@@ -17,6 +18,7 @@ export function ProductView({ product }: ProductViewProps) {
         : [product.image].filter(Boolean) as string[];
 
     const [activeImage, setActiveImage] = useState(images[product.featured_image_index || 0] || images[0]);
+    const { addToCart } = useCart();
 
     // Pricing Logic
     const mainPrice = product.prices?.find(p => p.active) || product.prices?.[0];
@@ -30,9 +32,12 @@ export function ProductView({ product }: ProductViewProps) {
     const isRecurring = mainPrice?.type === 'recurring';
     const intervalDisplay = isRecurring ? `/${mainPrice.interval}` : "";
 
-    const handleCheckout = () => {
-        // Placeholder for checkout logic
-        alert("Checkout flow to be implemented!");
+    const handleAddToCart = () => {
+        if (mainPrice) {
+            addToCart(product, mainPrice);
+        } else {
+            alert("No active price available for this product!");
+        }
     };
 
     return (
@@ -84,7 +89,7 @@ export function ProductView({ product }: ProductViewProps) {
                             return (
                                 <Badge
                                     key={tag.name}
-                                    variant="secondary"
+                                    variant="default"
                                     style={tag.color ? { borderColor: tag.color, color: tag.color } : {}}
                                 >
                                     {tag.name}
@@ -116,7 +121,7 @@ export function ProductView({ product }: ProductViewProps) {
                         </li>
                      </ul> */}
 
-                    <Button size="lg" className="w-full text-lg h-12" onPress={handleCheckout}>
+                    <Button size="lg" className="w-full text-lg h-12" onPress={handleAddToCart}>
                         <ShoppingBag className="w-5 h-5 mr-2" />
                         {isRecurring ? "Subscribe Now" : "Add to Cart"}
                     </Button>

@@ -5,7 +5,7 @@ export default async function TagsPage() {
     const tags = await getTags();
 
     return (
-        <div className="py-8">
+        <div>
             <TagList tags={tags} />
         </div>
     );
