@@ -102,8 +102,56 @@ export async function POST(req: Request) {
             }
         });
 
+        // 4. Create Order and Order Items in DB
+        // Get organizationId if available from previous step
+        let organizationId = null;
+        if (user) {
+            const { data: orgMember } = await systemClient
+                .from('organization_members')
+                .select('organization_id')
+                .eq('user_id', user.id)
+                .single();
+            organizationId = orgMember?.organization_id;
+        }
+
+        const { data: order, error: orderError } = await systemClient
+            .from('orders')
+            .insert({
+                user_id: user?.id || null,
+                organization_id: organizationId,
+                status: 'pending',
+                total_amount: totalAmount,
+                currency: currency,
+                stripe_payment_intent_id: paymentIntent.id,
+                // billing_details will be updated later via webhook or if collected here
+            })
+            .select()
+            .single();
+
+        if (orderError) {
+            console.error("Error creating order:", orderError);
+            // We don't necessarily fail the whole request because PI is created, but logging it is critical
+        } else if (order) {
+            const orderItemsData = items.map(item => ({
+                order_id: order.id,
+                product_id: item.product.id,
+                price_id: item.id,
+                quantity: item.quantity,
+                unit_amount: securePrices.find(p => p.id === item.id)?.unit_amount
+            }));
+
+            const { error: itemsError } = await systemClient
+                .from('order_items')
+                .insert(orderItemsData);
+
+            if (itemsError) {
+                console.error("Error creating order items:", itemsError);
+            }
+        }
+
         return NextResponse.json({
             clientSecret: paymentIntent.client_secret,
+            orderId: order?.id
         });
     } catch (error) {
         console.error('Error creating PaymentIntent:', error);

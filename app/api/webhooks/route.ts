@@ -2,7 +2,7 @@
 import { headers } from 'next/headers';
 import Stripe from 'stripe';
 import { stripe } from '@/lib/stripe/server';
-import { upsertProductRecord, upsertPriceRecord, manageSubscriptionStatusChange, upsertOrganizationCustomer } from '@/lib/stripe/admin';
+import { upsertProductRecord, upsertPriceRecord, manageSubscriptionStatusChange, upsertOrganizationCustomer, updateOrderStatus } from '@/lib/stripe/admin';
 
 const relevantEvents = new Set([
     'product.created',
@@ -12,7 +12,9 @@ const relevantEvents = new Set([
     'checkout.session.completed',
     'customer.subscription.created',
     'customer.subscription.updated',
-    'customer.subscription.deleted'
+    'customer.subscription.deleted',
+    'payment_intent.succeeded',
+    'payment_intent.payment_failed'
 ]);
 
 export async function POST(req: Request) {
@@ -70,6 +72,20 @@ export async function POST(req: Request) {
                             true
                         );
                     }
+                    break;
+                case 'payment_intent.succeeded':
+                    const piSucceeded = event.data.object as Stripe.PaymentIntent;
+                    await updateOrderStatus(
+                        piSucceeded.id,
+                        'completed',
+                        (piSucceeded as any).shipping || (piSucceeded as any).billing_details
+                    );
+                    break;
+                case 'payment_intent.payment_failed':
+                    await updateOrderStatus(
+                        (event.data.object as Stripe.PaymentIntent).id,
+                        'cancelled'
+                    );
                     break;
                 default:
                     throw new Error('Unhandled relevant event!');

@@ -135,3 +135,25 @@ export const upsertOrganizationCustomer = async (
     }
     console.log(`Linked Org ${organizationId} to Stripe Customer ${stripeCustomerId}`);
 };
+
+/**
+ * Updates an order status based on the Stripe PaymentIntent ID.
+ */
+export const updateOrderStatus = async (
+    paymentIntentId: string,
+    status: 'completed' | 'cancelled' | 'processing',
+    billingDetails?: any
+) => {
+    const { error } = await supabaseAdmin
+        .from('orders')
+        .update({
+            status,
+            billing_details: billingDetails ?? undefined
+        })
+        .eq('stripe_payment_intent_id', paymentIntentId);
+
+    if (error) {
+        throw error;
+    }
+    console.log(`Updated order with PI ${paymentIntentId} to status ${status}`);
+};
