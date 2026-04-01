@@ -19,6 +19,7 @@ import { useIsSuperAdmin } from "@/hooks/use-admin";
 const baseNavigation: (NavItemType & { view: string })[] = [
     { label: "Dashboard", href: "/dashboard", view: "dashboard", icon: LayoutGrid },
     { label: "Projects", href: "/projects", view: "projects", icon: BarChart2 },
+    { label: "Orders", href: "/admin/orders", view: "orders", icon: ShoppingBag },
     { label: "Users", href: "/users", view: "users", icon: Users },
     { label: "Inbox", href: "/notifications", view: "notifications", icon: Inbox, badge: <Badge variant="brand" size="sm">3</Badge> },
     { label: "Settings", href: "/settings", view: "settings", icon: Settings },
