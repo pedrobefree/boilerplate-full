@@ -68,10 +68,16 @@ export async function POST(req: Request) {
                     break;
                 case 'payment_intent.succeeded':
                     const piSucceeded = event.data.object as Stripe.PaymentIntent;
+                    // To get the email and name submitted via Payment Element by guests, we must expand latest_charge
+                    const expandedPi = await stripe.paymentIntents.retrieve(piSucceeded.id, {
+                        expand: ['latest_charge']
+                    });
+                    const charge = expandedPi.latest_charge as Stripe.Charge | null | undefined;
+                    
                     await updateOrderStatus(
                         piSucceeded.id,
                         'Payment Approved',
-                        (piSucceeded as any).shipping || (piSucceeded as any).billing_details
+                        charge?.billing_details
                     );
                     break;
                 case 'payment_intent.payment_failed':

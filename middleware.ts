@@ -1,7 +1,7 @@
 import { createMiddlewareClient } from "@/lib/supabase/middleware";
 import { type NextRequest, NextResponse } from "next/server";
 
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
     const { supabase, supabaseResponse } = createMiddlewareClient(request);
 
     // IMPORTANT: Avoid writing any logic between createServerClient and
@@ -19,6 +19,7 @@ export async function proxy(request: NextRequest) {
         !request.nextUrl.pathname.startsWith("/forgot-password") &&
         !request.nextUrl.pathname.startsWith("/auth") &&
         !request.nextUrl.pathname.startsWith("/api/webhooks") &&
+        !request.nextUrl.pathname.startsWith("/api/checkout") &&
         !request.nextUrl.pathname.startsWith("/products") &&
         !request.nextUrl.pathname.startsWith("/pricing") &&
         !request.nextUrl.pathname.startsWith("/contact") &&
