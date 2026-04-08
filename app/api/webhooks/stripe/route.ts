@@ -70,14 +70,14 @@ export async function POST(req: Request) {
                     const piSucceeded = event.data.object as Stripe.PaymentIntent;
                     await updateOrderStatus(
                         piSucceeded.id,
-                        'completed',
+                        'Payment Approved',
                         (piSucceeded as any).shipping || (piSucceeded as any).billing_details
                     );
                     break;
                 case 'payment_intent.payment_failed':
                     await updateOrderStatus(
                         (event.data.object as Stripe.PaymentIntent).id,
-                        'cancelled'
+                        'Canceled'
                     );
                     break;
                 default:

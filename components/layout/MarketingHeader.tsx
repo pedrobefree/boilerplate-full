@@ -7,9 +7,12 @@ import { Menu, X } from "lucide-react";
 import { useState } from "react";
 import { ShoppingBag } from "lucide-react";
 import { useCart } from "@/app/context/CartContext";
+import { useAuth } from "@/components/features/auth/AuthProvider";
+import { UserMenu } from "./UserMenu";
 
 export const MarketingHeader = () => {
     const { totalItems, setIsCartOpen } = useCart();
+    const { user, isLoading } = useAuth();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
     const toggleMenu = () => setIsMobileMenuOpen(!isMobileMenuOpen);
@@ -42,14 +45,23 @@ export const MarketingHeader = () => {
                                 </span>
                             )}
                         </button>
-                        <Link href="/login">
-                            <Button variant="tertiary" className="text-gray-600 hover:text-gray-900">
-                                Log in
-                            </Button>
-                        </Link>
-                        <Link href="/signup">
-                            <Button>Sign up</Button>
-                        </Link>
+                        
+                        {!isLoading && (
+                            user ? (
+                                <UserMenu />
+                            ) : (
+                                <>
+                                    <Link href="/login">
+                                        <Button variant="tertiary" className="text-gray-600 hover:text-gray-900">
+                                            Log in
+                                        </Button>
+                                    </Link>
+                                    <Link href="/signup">
+                                        <Button>Sign up</Button>
+                                    </Link>
+                                </>
+                            )
+                        )}
                     </div>
 
                     {/* Mobile Menu Button */}
@@ -86,12 +98,21 @@ export const MarketingHeader = () => {
                         <MobileNavLink href="/contact" onClick={toggleMenu}>Contact</MobileNavLink>
                     </div>
                     <div className="border-t border-gray-100 px-4 py-3 space-y-2">
-                        <Link href="/login" onClick={toggleMenu} className="block">
-                            <Button variant="tertiary" className="w-full justify-start text-gray-600">Log in</Button>
-                        </Link>
-                        <Link href="/signup" onClick={toggleMenu} className="block">
-                            <Button className="w-full">Sign up</Button>
-                        </Link>
+                        {!isLoading && !user && (
+                            <>
+                                <Link href="/login" onClick={toggleMenu} className="block">
+                                    <Button variant="tertiary" className="w-full justify-start text-gray-600">Log in</Button>
+                                </Link>
+                                <Link href="/signup" onClick={toggleMenu} className="block">
+                                    <Button className="w-full">Sign up</Button>
+                                </Link>
+                            </>
+                        )}
+                        {user && (
+                            <Link href="/profile" onClick={toggleMenu} className="block">
+                                <Button variant="secondary" className="w-full justify-start text-gray-600">Your Profile</Button>
+                            </Link>
+                        )}
                     </div>
                 </div>
             )}

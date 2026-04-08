@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createSystemClient } from "@/lib/supabase/server";
 import { stripe } from "@/lib/stripe/server";
 
 export interface OrderFilters {
@@ -158,12 +158,102 @@ export async function getPaymentIntentDetails(paymentIntentId: string) {
     }
 }
 
+const STATUS_RANKS: Record<string, number> = {
+    'Waiting for Payment': 1,
+    'Payment Approved': 2,
+    'Pending Delivery': 3,
+    'Completed': 4,
+    'Canceled': 5
+};
+
 export async function updateOrderStatus(orderId: string, status: string) {
     const supabase = await createClient();
+
+    // 1. Fetch current status for validation
+    const { data: order, error: fetchError } = await supabase
+        .from('orders')
+        .select('status, stripe_payment_intent_id')
+        .eq('id', orderId)
+        .single();
+
+    if (fetchError || !order) {
+        console.error("Error fetching order for update:", fetchError);
+        return { success: false, error: fetchError?.message || 'Order not found' };
+    }
+
+    const currentRank = STATUS_RANKS[order.status] || 0;
+    const newRank = STATUS_RANKS[status] || 0;
+
+    // 2. Validate sequence
+    // Rule: Cannot go back in sequence, unless it's a cancellation from a non-completed state.
+    if (status !== 'Canceled') {
+        if (newRank <= currentRank && order.status !== status) {
+            return {
+                success: false,
+                error: `Cannot change status from "${order.status}" to "${status}". Status must follow the sequential order.`
+            };
+        }
+    } else {
+        // Validation for 'Canceled'
+        if (order.status === 'Completed') {
+            return { success: false, error: 'Cannot cancel a completed order.' };
+        }
+        if (order.status === 'Canceled') {
+            return { success: false, error: 'Order is already canceled.' };
+        }
+    }
+
+    // 3. Handle Refund for Cancellation
+    if (status === 'Canceled') {
+        if (order.stripe_payment_intent_id) {
+            try {
+                console.log(`[Stripe] Initiating refund for order ${orderId} (PI: ${order.stripe_payment_intent_id})`);
+                await stripe.refunds.create({
+                    payment_intent: order.stripe_payment_intent_id
+                });
+                console.log(`[Stripe] Refund successfully processed for order ${orderId}`);
+            } catch (err: any) {
+                console.error("[Stripe] Error processing refund:", err);
+                return { success: false, error: `Stripe Refund Error: ${err.message}` };
+            }
+        }
+    }
+
+    // 4. Update order status
     const { error } = await supabase.from('orders').update({ status }).eq('id', orderId);
     if (error) {
-        console.error("Error updating order status:", error);
+        console.error("Error updating order status in DB:", error);
         return { success: false, error: error.message };
     }
+
     return { success: true };
+}
+
+export async function getOrderByPaymentIntent(paymentIntentId: string) {
+    const supabase = await createClient();
+    
+    // We use the normal client first to see if the user is logged in and owns it
+    const { data: order, error } = await supabase
+        .from('orders')
+        .select('*, items:order_items(id, quantity, unit_amount, product:products(name))')
+        .eq('stripe_payment_intent_id', paymentIntentId)
+        .single();
+
+    if (order) return order;
+
+    // If not found (likely guest), use system client but ONLY if PI ID is provided
+    // This is safe because the client must know the PI ID to call this.
+    const systemClient = createSystemClient();
+    const { data: guestOrder, error: guestError } = await systemClient
+        .from('orders')
+        .select('*, items:order_items(id, quantity, unit_amount, product:products(name))')
+        .eq('stripe_payment_intent_id', paymentIntentId)
+        .single();
+
+    if (guestError) {
+        console.error("Error fetching guest order:", guestError);
+        return null;
+    }
+
+    return guestOrder;
 }

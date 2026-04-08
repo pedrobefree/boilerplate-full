@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { OrderStatusUpdate } from "./OrderStatusUpdate";
 
 export const dynamic = 'force-dynamic';
 
@@ -46,10 +47,15 @@ export default async function OrderDetailsPage({
 
     const getStatusVariant = (status: string) => {
         switch (status) {
-            case 'completed': return 'success';
-            case 'pending': return 'warning';
-            case 'processing': return 'brand';
-            case 'cancelled': return 'error';
+            case 'completed':
+            case 'Completed':
+            case 'Payment Approved': return 'success';
+            case 'pending':
+            case 'Waiting for Payment': return 'warning';
+            case 'processing':
+            case 'Pending Delivery': return 'brand';
+            case 'cancelled':
+            case 'Canceled': return 'error';
             default: return 'default';
         }
     };
@@ -75,7 +81,7 @@ export default async function OrderDetailsPage({
                     </Link>
                     <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
                         Order #{order.id.slice(0, 8)}
-                        <Badge variant={getStatusVariant(order.status)}>{order.status}</Badge>
+                        <OrderStatusUpdate orderId={order.id} currentStatus={order.status} />
                     </h2>
                     <p className="text-sm text-gray-500 mt-1">
                         Placed on {new Date(order.created_at).toLocaleString()}

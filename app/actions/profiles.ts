@@ -13,6 +13,13 @@ export interface ProfileUpdateParams {
     last_name?: string;
     avatar_url?: string;
     bio?: string;
+    phone?: string;
+    address_line1?: string;
+    address_line2?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    country?: string;
 }
 
 /**
@@ -89,6 +96,7 @@ export async function updateMyProfile(updates: ProfileUpdateParams) {
         // 4. Cache Revalidation
         revalidatePath("/dashboard/settings");
         revalidatePath("/dashboard/profile");
+        revalidatePath("/profile");
 
         return data;
     }, { action: "updateMyProfile", updates });

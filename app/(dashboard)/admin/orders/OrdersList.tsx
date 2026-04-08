@@ -65,10 +65,15 @@ export function OrdersList({ orders, totalCount, initialFilters }: OrdersListPro
 
     const getStatusVariant = (status: string) => {
         switch (status) {
-            case 'completed': return 'success';
-            case 'pending': return 'warning';
-            case 'processing': return 'brand';
-            case 'cancelled': return 'error';
+            case 'completed':
+            case 'Completed':
+            case 'Payment Approved': return 'success';
+            case 'pending':
+            case 'Waiting for Payment': return 'warning';
+            case 'processing':
+            case 'Pending Delivery': return 'brand';
+            case 'cancelled':
+            case 'Canceled': return 'error';
             default: return 'default';
         }
     };
@@ -104,10 +109,11 @@ export function OrdersList({ orders, totalCount, initialFilters }: OrdersListPro
                     placeholder="All Statuses"
                 >
                     <SelectItem id="all">All Statuses</SelectItem>
-                    <SelectItem id="pending">Pending</SelectItem>
-                    <SelectItem id="processing">Processing</SelectItem>
-                    <SelectItem id="completed">Completed</SelectItem>
-                    <SelectItem id="cancelled">Cancelled</SelectItem>
+                    <SelectItem id="Waiting for Payment">Waiting for Payment</SelectItem>
+                    <SelectItem id="Payment Approved">Payment Approved</SelectItem>
+                    <SelectItem id="Pending Delivery">Pending Delivery</SelectItem>
+                    <SelectItem id="Completed">Completed</SelectItem>
+                    <SelectItem id="Canceled">Canceled</SelectItem>
                 </Select>
             </div>
             

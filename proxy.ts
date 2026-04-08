@@ -19,6 +19,10 @@ export async function proxy(request: NextRequest) {
         !request.nextUrl.pathname.startsWith("/forgot-password") &&
         !request.nextUrl.pathname.startsWith("/auth") &&
         !request.nextUrl.pathname.startsWith("/api/webhooks") &&
+        !request.nextUrl.pathname.startsWith("/products") &&
+        !request.nextUrl.pathname.startsWith("/pricing") &&
+        !request.nextUrl.pathname.startsWith("/contact") &&
+        !request.nextUrl.pathname.startsWith("/checkout") &&
         request.nextUrl.pathname !== "/"
     ) {
         // no user, potentially respond by redirecting the user to the login page

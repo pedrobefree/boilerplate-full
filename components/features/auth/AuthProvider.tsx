@@ -42,9 +42,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 setUser(session?.user ?? null);
                 setIsLoading(false);
 
-                // Optionally refresh the page on logic/logout to clear sensitive state
+                // Optionally refresh the page on login/logout to clear sensitive state
                 if (_event === "SIGNED_IN") router.refresh();
-                if (_event === "SIGNED_OUT") router.push("/login");
+                if (_event === "SIGNED_OUT") {
+                    setUser(null);
+                    setSession(null);
+                    router.refresh();
+                }
             }
         );
 

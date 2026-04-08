@@ -119,7 +119,7 @@ export async function POST(req: Request) {
             .insert({
                 user_id: user?.id || null,
                 organization_id: organizationId,
-                status: 'pending',
+                status: 'Waiting for Payment',
                 total_amount: totalAmount,
                 currency: currency,
                 stripe_payment_intent_id: paymentIntent.id,

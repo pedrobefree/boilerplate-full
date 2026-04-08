@@ -138,22 +138,137 @@ export const upsertOrganizationCustomer = async (
 
 /**
  * Updates an order status based on the Stripe PaymentIntent ID.
+ * Also handles user creation/association and profile sync.
  */
 export const updateOrderStatus = async (
     paymentIntentId: string,
-    status: 'completed' | 'cancelled' | 'processing',
+    status: 'Payment Approved' | 'Canceled' | 'Pending Delivery' | 'Completed' | 'Waiting for Payment',
     billingDetails?: any
 ) => {
-    const { error } = await supabaseAdmin
+    // 1. Fetch current order to check for user association
+    const { data: order, error: orderError } = await supabaseAdmin
         .from('orders')
-        .update({
-            status,
-            billing_details: billingDetails ?? undefined
-        })
-        .eq('stripe_payment_intent_id', paymentIntentId);
+        .select('*')
+        .eq('stripe_payment_intent_id', paymentIntentId)
+        .single();
 
-    if (error) {
-        throw error;
+    if (orderError || !order) {
+        console.error(`Order with PI ${paymentIntentId} not found:`, orderError);
+        return;
     }
-    console.log(`Updated order with PI ${paymentIntentId} to status ${status}`);
+
+    let userId = order.user_id;
+    let magicLink = null;
+    const email = billingDetails?.email || order.billing_details?.email;
+    const name = billingDetails?.name || order.billing_details?.name;
+
+    // 2. User Lifecycle Management (US4)
+    if (!userId && email) {
+        // Find existing user by email
+        const { data: userData } = await supabaseAdmin.auth.admin.listUsers();
+        const existingUser = userData.users.find(u => u.email === email);
+
+        if (existingUser) {
+            userId = existingUser.id;
+        } else {
+            // Create new user (role: 'user')
+            const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+                email,
+                user_metadata: { full_name: name },
+                email_confirm: true,
+                role: 'user'
+            });
+
+            if (createError) {
+                console.error("Error creating user:", createError);
+            } else if (newUser.user) {
+                userId = newUser.user.id;
+
+                // Generate Magic Link
+                const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+                    type: 'magiclink',
+                    email,
+                    options: { redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/dashboard` }
+                });
+
+                if (linkError) {
+                    console.error("Error generating magic link:", linkError);
+                } else {
+                    magicLink = linkData.properties.action_link;
+                }
+            }
+        }
+    }
+
+    // 3. Organization Membership (Customer role)
+    if (userId && order.organization_id) {
+        const { data: existingMember } = await supabaseAdmin
+            .from('organization_members')
+            .select('id')
+            .eq('organization_id', order.organization_id)
+            .eq('user_id', userId)
+            .single();
+
+        if (!existingMember) {
+            await supabaseAdmin
+                .from('organization_members')
+                .insert({
+                    organization_id: order.organization_id,
+                    user_id: userId,
+                    role: 'customer'
+                });
+        }
+    }
+
+    // 4. Profile Auto-fill (US6)
+    if (userId && billingDetails?.address) {
+        const address = billingDetails.address;
+        const profileUpdate: any = {};
+
+        // Only update if current profile fields are null/empty
+        const { data: profile } = await supabaseAdmin
+            .from('profiles')
+            .select('*')
+            .eq('id', userId)
+            .single();
+
+        if (profile) {
+            if (!profile.address_line1) profileUpdate.address_line1 = address.line1;
+            if (!profile.address_line2) profileUpdate.address_line2 = address.line2;
+            if (!profile.city) profileUpdate.city = address.city;
+            if (!profile.state) profileUpdate.state = address.state;
+            if (!profile.zip) profileUpdate.zip = address.postal_code;
+            if (!profile.country) profileUpdate.country = address.country;
+            if (!profile.phone && billingDetails.phone) profileUpdate.phone = billingDetails.phone;
+            if (!profile.full_name && name) profileUpdate.full_name = name;
+
+            if (Object.keys(profileUpdate).length > 0) {
+                await supabaseAdmin
+                    .from('profiles')
+                    .update(profileUpdate)
+                    .eq('id', userId);
+            }
+        }
+    }
+
+    // 5. Final Order Update
+    const updateData: any = {
+        status,
+        billing_details: billingDetails ?? order.billing_details,
+        user_id: userId
+    };
+
+    if (magicLink) {
+        updateData.magic_link = magicLink;
+    }
+
+    const { error: updateError } = await supabaseAdmin
+        .from('orders')
+        .update(updateData)
+        .eq('id', order.id);
+
+    if (updateError) {
+        throw updateError;
+    }
+    console.log(`Updated order ${order.id} to status ${status}. User: ${userId}`);
 };
