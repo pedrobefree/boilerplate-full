@@ -16,28 +16,90 @@ export type ProductWithDetails = {
     featured_image_index: number;
     metadata: any;
     prices?: any[];
-    category?: { name: string } | null;
-    tags?: { tag_id: string, tags: { name: string, color: string } }[];
+    category?: { id: string; name: string; slug: string } | null;
+    tags?: { tag_id: string, tags: { id: string; name: string; color: string } }[];
     images?: { url: string, display_order: number }[];
 };
 
-export async function getProducts(options?: { search?: string }) {
+export type ProductSort = "relevance" | "name-asc" | "name-desc" | "price-asc" | "price-desc";
+
+export async function getProducts(options?: {
+    search?: string;
+    categorySlug?: string;
+    tagId?: string;
+    sort?: ProductSort;
+}) {
     const supabase = await createClient();
+    const search = options?.search?.trim();
+    const sort = options?.sort ?? "relevance";
+    let productIdsForTag: string[] | null = null;
+
+    if (options?.tagId) {
+        const { data: taggedProducts, error: taggedProductsError } = await supabase
+            .from("product_tags")
+            .select("product_id")
+            .eq("tag_id", options.tagId);
+
+        if (taggedProductsError) {
+            console.error("Error fetching tagged products:", taggedProductsError);
+            return [];
+        }
+
+        productIdsForTag = (taggedProducts ?? []).map((entry) => entry.product_id);
+        if (productIdsForTag.length === 0) {
+            return [];
+        }
+    }
+
+    let categoryId: string | null = null;
+    if (options?.categorySlug) {
+        const { data: category, error: categoryError } = await supabase
+            .from("categories")
+            .select("id")
+            .eq("slug", options.categorySlug)
+            .maybeSingle();
+
+        if (categoryError) {
+            console.error("Error fetching category for product filters:", categoryError);
+            return [];
+        }
+
+        if (!category) {
+            return [];
+        }
+
+        categoryId = category.id;
+    }
+
     let query = supabase
         .from("products")
         .select(`
             *,
-            category:category_id (name),
+            category:category_id (id, name, slug),
             prices (*),
             tags:product_tags (
                 tag_id,
-                tags (name, color)
+                tags (id, name, color)
             )
         `)
-        .order("name");
+        .eq("active", true);
 
-    if (options?.search) {
-        query = query.ilike("name", `%${options.search}%`);
+    if (search) {
+        query = query.ilike("name", `%${search}%`);
+    }
+
+    if (categoryId) {
+        query = query.eq("category_id", categoryId);
+    }
+
+    if (productIdsForTag) {
+        query = query.in("id", productIdsForTag);
+    }
+
+    if (sort === "name-desc") {
+        query = query.order("name", { ascending: false });
+    } else {
+        query = query.order("name", { ascending: true });
     }
 
     const { data, error } = await query;
@@ -46,7 +108,24 @@ export async function getProducts(options?: { search?: string }) {
         return [];
     }
 
-    return data as any[];
+    const products = (data ?? []) as ProductWithDetails[];
+
+    if (sort === "price-asc" || sort === "price-desc") {
+        const direction = sort === "price-asc" ? 1 : -1;
+
+        products.sort((left, right) => {
+            const leftPrice = left.prices?.find((price) => price.active)?.unit_amount ?? left.prices?.[0]?.unit_amount ?? Number.POSITIVE_INFINITY;
+            const rightPrice = right.prices?.find((price) => price.active)?.unit_amount ?? right.prices?.[0]?.unit_amount ?? Number.POSITIVE_INFINITY;
+
+            if (leftPrice === rightPrice) {
+                return left.name.localeCompare(right.name);
+            }
+
+            return (leftPrice - rightPrice) * direction;
+        });
+    }
+
+    return products;
 }
 
 export async function getProduct(id: string) {

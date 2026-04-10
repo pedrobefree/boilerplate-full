@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { BarChart2, Users, Settings, Search, LayoutGrid, Inbox, LifeBuoy, Building, ShoppingBag } from "lucide-react"
+import { BarChart2, Users, Settings, Search, LayoutGrid, Inbox, LifeBuoy, Building, ShoppingBag, History } from "lucide-react"
 import { NavList, NavAccountCard, MobileNavigationHeader } from "./navigation/SidebarNavigation"
 import type { NavItemType } from "./navigation/NavList"
 import { Badge } from "@/components/ui/Badge"
@@ -20,6 +20,7 @@ const baseNavigation: (NavItemType & { view: string })[] = [
     { label: "Dashboard", href: "/dashboard", view: "dashboard", icon: LayoutGrid },
     { label: "Projects", href: "/projects", view: "projects", icon: BarChart2 },
     { label: "Orders", href: "/admin/orders", view: "orders", icon: ShoppingBag },
+    { label: "Activity", href: "/admin/activity", view: "activity", icon: History },
     { label: "Users", href: "/users", view: "users", icon: Users },
     { label: "Inbox", href: "/notifications", view: "notifications", icon: Inbox, badge: <Badge variant="brand" size="sm">3</Badge> },
     { label: "Settings", href: "/settings", view: "settings", icon: Settings },

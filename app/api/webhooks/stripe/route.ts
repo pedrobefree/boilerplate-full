@@ -74,10 +74,18 @@ export async function POST(req: Request) {
                     });
                     const charge = expandedPi.latest_charge as Stripe.Charge | null | undefined;
                     
+                    console.log(`[DEBUG] Webhook payment_intent.succeeded for PI: ${piSucceeded.id}`);
+                    console.log(`[DEBUG] Extracted charge:`, charge?.id, `Email:`, charge?.billing_details?.email);
+                    console.log(`[DEBUG] Full PI receipt_email:`, expandedPi.receipt_email, `customer:`, expandedPi.customer);
+
                     await updateOrderStatus(
                         piSucceeded.id,
                         'Payment Approved',
-                        charge?.billing_details
+                        charge?.billing_details, // Pass the entire billing_details object
+                        {
+                            receipt_email: expandedPi.receipt_email,
+                            customer_email: (expandedPi as any).customer_details?.email // sometimes hidden here
+                        }
                     );
                     break;
                 case 'payment_intent.payment_failed':

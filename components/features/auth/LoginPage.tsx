@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
+import { logAuthEvent } from "@/app/actions/activity-logs";
 
 export const LoginPage = () => {
     const router = useRouter();
@@ -44,6 +45,8 @@ export const LoginPage = () => {
             });
 
             if (signInError) throw signInError;
+
+            await logAuthEvent("login");
 
             addToast({
                 title: "Welcome back!",

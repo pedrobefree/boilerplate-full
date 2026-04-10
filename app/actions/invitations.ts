@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { withErrorHandling } from "@/lib/supabase/errors";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
+import { recordCurrentUserActivity } from "@/lib/activity-log";
 
 const ACTIVE_ORG_COOKIE = "current_org_id";
 
@@ -78,6 +79,11 @@ export async function getInvitationByToken(token: string) {
 export async function acceptInvitation(token: string) {
     return withErrorHandling(async () => {
         const supabase = await createClient();
+        const { data: invitation } = await supabase
+            .from("organization_invitations")
+            .select("id, organization_id, email, role")
+            .eq("token", token)
+            .maybeSingle();
 
         // Use the database function to accept the invitation
         const { data, error } = await supabase.rpc("accept_invitation", {
@@ -88,6 +94,19 @@ export async function acceptInvitation(token: string) {
 
         if (!data?.success) {
             throw new Error(data?.error || "Failed to accept invitation");
+        }
+
+        if (invitation) {
+            await recordCurrentUserActivity({
+                organizationId: invitation.organization_id,
+                action: "invitation_accepted",
+                entityType: "invitations",
+                entityId: invitation.id,
+                metadata: {
+                    email: invitation.email,
+                    role: invitation.role,
+                },
+            });
         }
 
         revalidatePath("/users");
@@ -154,6 +173,12 @@ export async function cancelInvitation(invitationId: string) {
     return withErrorHandling(async () => {
         const supabase = await createClient();
         const orgId = await getActiveOrg();
+        const { data: invitation } = await supabase
+            .from("organization_invitations")
+            .select("id, email, role")
+            .eq("id", invitationId)
+            .eq("organization_id", orgId)
+            .maybeSingle();
 
         const { error } = await supabase
             .from("organization_invitations")
@@ -163,6 +188,19 @@ export async function cancelInvitation(invitationId: string) {
             .eq("status", "pending");
 
         if (error) throw error;
+
+        if (invitation) {
+            await recordCurrentUserActivity({
+                organizationId: orgId,
+                action: "invitation_cancelled",
+                entityType: "invitations",
+                entityId: invitation.id,
+                metadata: {
+                    email: invitation.email,
+                    role: invitation.role,
+                },
+            });
+        }
 
         revalidatePath("/users");
         return { success: true };
@@ -213,6 +251,18 @@ export async function resendInvitation(invitationId: string) {
 
         // Send email
         await sendInvitationEmail(invitation.email, newToken, org?.name || "the team");
+
+        await recordCurrentUserActivity({
+            organizationId: orgId,
+            action: "invitation_sent",
+            entityType: "invitations",
+            entityId: invitationId,
+            metadata: {
+                email: invitation.email,
+                role: invitation.role,
+                resent: true,
+            },
+        });
 
         revalidatePath("/users");
         return { success: true };

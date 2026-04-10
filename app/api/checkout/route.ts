@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { stripe } from '@/lib/stripe/server';
 import { createClient, createSystemClient } from '@/lib/supabase/server';
 import { ProductWithDetails } from '@/app/actions/products';
+import { recordActivity } from '@/lib/activity-log';
 
 interface CheckoutItem {
     id: string; // price_id
@@ -147,6 +148,20 @@ export async function POST(req: Request) {
             if (itemsError) {
                 console.error("Error creating order items:", itemsError);
             }
+
+            await recordActivity({
+                organizationId,
+                actorId: user?.id || null,
+                action: "order_created",
+                entityType: "orders",
+                entityId: order.id,
+                metadata: {
+                    totalAmount,
+                    currency,
+                    itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
+                    paymentIntentId: paymentIntent.id,
+                },
+            });
         }
 
         return NextResponse.json({

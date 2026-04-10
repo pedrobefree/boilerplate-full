@@ -5,6 +5,7 @@ import { withErrorHandling } from "@/lib/supabase/errors";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { sendInvitationEmail } from "./invitations";
+import { recordCurrentUserActivity } from "@/lib/activity-log";
 
 const ACTIVE_ORG_COOKIE = "current_org_id";
 
@@ -216,6 +217,17 @@ export async function inviteMember(email: string, role: "owner" | "admin" | "mem
         // Send invitation email
         await sendInvitationEmail(email, invitation.token, org?.name || "the team");
 
+        await recordCurrentUserActivity({
+            organizationId: orgId,
+            action: "invitation_sent",
+            entityType: "invitations",
+            entityId: invitation.token,
+            metadata: {
+                email,
+                role,
+            },
+        });
+
         revalidatePath("/users");
         return { success: true, type: "invitation" as const, message: "Invitation sent!" };
     });
@@ -271,6 +283,12 @@ export async function updateMemberRole(memberId: string, role: "owner" | "admin"
     return withErrorHandling(async () => {
         const supabase = await createClient();
         const orgId = await getActiveOrg();
+        const { data: currentMember } = await supabase
+            .from("organization_members")
+            .select("id, role, user_id")
+            .eq("id", memberId)
+            .eq("organization_id", orgId)
+            .maybeSingle();
 
         // RBAC Check: Only admins or owners can update roles
         const { data: { user: currentUser } } = await supabase.auth.getUser();
@@ -304,6 +322,20 @@ export async function updateMemberRole(memberId: string, role: "owner" | "admin"
 
         if (error) throw error;
 
+        if (currentMember && currentMember.role !== role) {
+            await recordCurrentUserActivity({
+                organizationId: orgId,
+                action: "member_role_changed",
+                entityType: "members",
+                entityId: memberId,
+                metadata: {
+                    userId: currentMember.user_id,
+                    previousRole: currentMember.role,
+                    nextRole: role,
+                },
+            });
+        }
+
         revalidatePath("/users");
         return { success: true };
     });
@@ -320,7 +352,7 @@ export async function removeMember(memberId: string) {
 
         const { data: member } = await supabase
             .from("organization_members")
-            .select("user_id, profiles(email)")
+            .select("user_id, role, profiles(email)")
             .eq("id", memberId)
             .single();
 
@@ -371,6 +403,18 @@ export async function removeMember(memberId: string) {
 
         if (error) throw error;
 
+        await recordCurrentUserActivity({
+            organizationId: orgId,
+            action: "member_removed",
+            entityType: "members",
+            entityId: memberId,
+            metadata: {
+                userId: member?.user_id,
+                email: memberEmail,
+                role: (member as any)?.role,
+            },
+        });
+
         revalidatePath("/users");
         return { success: true };
     });
@@ -380,6 +424,12 @@ export async function updateMemberDetails(memberId: string, data: { role: "owner
     return withErrorHandling(async () => {
         const supabase = await createClient();
         const orgId = await getActiveOrg();
+        const { data: existingMember } = await supabase
+            .from("organization_members")
+            .select("id, role, user_id")
+            .eq("id", memberId)
+            .eq("organization_id", orgId)
+            .maybeSingle();
 
         // RBAC Check: Only admins or owners can update members
         const { data: { user: currentUser } } = await supabase.auth.getUser();
@@ -429,6 +479,20 @@ export async function updateMemberDetails(memberId: string, data: { role: "owner
                 .eq("id", member.user_id);
 
             if (profileError) throw profileError;
+        }
+
+        if (existingMember && existingMember.role !== data.role) {
+            await recordCurrentUserActivity({
+                organizationId: orgId,
+                action: "member_role_changed",
+                entityType: "members",
+                entityId: memberId,
+                metadata: {
+                    userId: existingMember.user_id,
+                    previousRole: existingMember.role,
+                    nextRole: data.role,
+                },
+            });
         }
 
         revalidatePath("/users");

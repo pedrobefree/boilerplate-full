@@ -24,6 +24,8 @@ function CheckoutSuccessContent() {
     const { clearCart } = useCart();
 
     useEffect(() => {
+        let isPolling = true;
+
         const checkStatus = async () => {
             const clientSecret = searchParams.get("payment_intent_client_secret");
 
@@ -41,35 +43,50 @@ function CheckoutSuccessContent() {
 
             const { paymentIntent } = await stripe.retrievePaymentIntent(clientSecret);
             
-            switch (paymentIntent?.status) {
-                case "succeeded":
+            if (paymentIntent?.status === "succeeded") {
+                clearCart();
+                let attempt = 0;
+                let foundLink = null;
+                
+                // Webhooks can take a few seconds to hit our server and create the user.
+                // We'll poll up to 10 times (20 seconds total) waiting for the magic_link to populate.
+                while (isPolling && attempt < 10) {
+                    try {
+                        const order = await getOrderByPaymentIntent(paymentIntentId);
+                        if (order?.magic_link) {
+                            foundLink = order.magic_link;
+                            break; // Stop polling once we find the link!
+                        }
+                    } catch (e) {
+                        console.error("Polling order error:", e);
+                    }
+                    attempt++;
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
+
+                if (isPolling) {
                     setStatus("success");
                     setMessage("Payment succeeded! We've received your order.");
-                    clearCart();
-                    
-                    // Fetch order to see if a magic link was generated
-                    const order = await getOrderByPaymentIntent(paymentIntentId);
-                    if (order?.magic_link) {
-                        setMagicLink(order.magic_link);
-                    }
-                    break;
-                case "processing":
-                    setStatus("success");
-                    setMessage("Your payment is processing. We'll update you when payment is received.");
-                    clearCart();
-                    break;
-                case "requires_payment_method":
-                    setStatus("error");
-                    setMessage("Your payment was not successful, please try again.");
-                    break;
-                default:
-                    setStatus("error");
-                    setMessage("Something went wrong with retrieving your payment status.");
-                    break;
+                    if (foundLink) setMagicLink(foundLink);
+                }
+            } else if (paymentIntent?.status === "processing") {
+                setStatus("success");
+                setMessage("Your payment is processing. We'll update you when payment is received.");
+                clearCart();
+            } else if (paymentIntent?.status === "requires_payment_method") {
+                setStatus("error");
+                setMessage("Your payment was not successful, please try again.");
+            } else {
+                setStatus("error");
+                setMessage("Something went wrong with retrieving your payment status.");
             }
         };
 
         checkStatus();
+
+        return () => {
+            isPolling = false;
+        };
     }, [searchParams, clearCart]);
 
     if (status === "loading") {
@@ -104,32 +121,29 @@ function CheckoutSuccessContent() {
                                 <h2 className="text-xl font-bold text-gray-900">Access Your Account</h2>
                             </div>
                             <p className="text-gray-700 mb-6 font-medium">
-                                We've created an account for you. Since emails are not being sent yet, please use the magic link below to set your password and access your orders:
+                                We've created an account for you. Click the button below to log in and access your orders. You can set your password from your account settings.
                             </p>
-                            <div className="flex flex-col gap-4">
-                                <Link href={magicLink} className="break-all p-4 bg-white border border-brand-200 rounded-xl text-brand-700 hover:bg-brand-50 transition-colors font-mono text-sm underline decoration-brand-300 underline-offset-4">
-                                    {magicLink}
-                                </Link>
-                                <Link 
-                                    href={magicLink} 
-                                    className={cn(buttonVariants({ variant: 'primary', size: 'xl' }), "w-full")}
-                                >
-                                    Confirm Access & Set Password
-                                </Link>
-                            </div>
+                            <a 
+                                href={magicLink} 
+                                className={cn(buttonVariants({ variant: 'primary', size: 'xl' }), "w-full text-center")}
+                            >
+                                Log In &amp; Access My Orders
+                            </a>
                             <div className="mt-4 flex items-start gap-2 text-sm text-brand-600">
                                 <Mail className="h-4 w-4 mt-0.5" />
-                                <p>Once you set your password, you'll be able to manage your orders and profile.</p>
+                                <p>This link will log you in automatically. Use it only once.</p>
                             </div>
                         </div>
                     )}
 
                     <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                        <Link href="/dashboard">
-                            <Button variant="secondary" className="w-full sm:w-auto h-12 px-8">Go to Dashboard</Button>
-                        </Link>
+                        {!magicLink && (
+                            <Link href="/dashboard">
+                                <Button variant="secondary" className="w-full sm:w-auto h-12 px-8">Go to Dashboard</Button>
+                            </Link>
+                        )}
                         <Link href="/products">
-                            <Button className="w-full sm:w-auto h-12 px-8">Continue Shopping</Button>
+                            <Button className="w-full sm:w-auto h-12 px-8 text-gray-600 bg-white border border-gray-200 hover:bg-gray-50">Continue Shopping</Button>
                         </Link>
                     </div>
                 </>

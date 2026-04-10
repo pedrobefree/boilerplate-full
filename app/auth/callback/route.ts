@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { recordCurrentUserActivity } from "@/lib/activity-log";
 
 /**
  * GET handler for Supabase OAuth callbacks.
@@ -18,6 +19,15 @@ export async function GET(request: Request) {
         const { error } = await supabase.auth.exchangeCodeForSession(code);
 
         if (!error) {
+            await recordCurrentUserActivity({
+                action: "login",
+                entityType: "auth",
+                entityId: "oauth",
+                metadata: {
+                    provider: "oauth",
+                },
+            });
+
             const forwardedHost = request.headers.get("x-forwarded-host"); // covers Vercel/proxies
             const isLocalEnv = process.env.NODE_ENV === "development";
 

@@ -2,6 +2,7 @@
 
 import { createClient, createSystemClient } from "@/lib/supabase/server";
 import { stripe } from "@/lib/stripe/server";
+import { recordCurrentUserActivity } from "@/lib/activity-log";
 
 export interface OrderFilters {
     status?: string;
@@ -172,7 +173,7 @@ export async function updateOrderStatus(orderId: string, status: string) {
     // 1. Fetch current status for validation
     const { data: order, error: fetchError } = await supabase
         .from('orders')
-        .select('status, stripe_payment_intent_id')
+        .select('status, stripe_payment_intent_id, organization_id')
         .eq('id', orderId)
         .single();
 
@@ -225,6 +226,17 @@ export async function updateOrderStatus(orderId: string, status: string) {
         console.error("Error updating order status in DB:", error);
         return { success: false, error: error.message };
     }
+
+    await recordCurrentUserActivity({
+        organizationId: order.organization_id,
+        action: status === "Canceled" ? "order_cancelled" : "order_status_changed",
+        entityType: "orders",
+        entityId: orderId,
+        metadata: {
+            previousStatus: order.status,
+            nextStatus: status,
+        },
+    });
 
     return { success: true };
 }

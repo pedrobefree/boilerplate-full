@@ -2,6 +2,7 @@
 import { stripe } from "@/lib/stripe/server";
 import { createClient } from "@supabase/supabase-js";
 import Stripe from "stripe";
+import { recordActivity } from "@/lib/activity-log";
 
 // NOTE: We use a direct service role client here for webhook handling to bypass specific RLS that might block system updates
 // or to ensure we have full access to write products/prices.
@@ -143,8 +144,11 @@ export const upsertOrganizationCustomer = async (
 export const updateOrderStatus = async (
     paymentIntentId: string,
     status: 'Payment Approved' | 'Canceled' | 'Pending Delivery' | 'Completed' | 'Waiting for Payment',
-    billingDetails?: any
+    billingDetails?: any,
+    extraStripeData?: { receipt_email?: string | null, customer_email?: string | null }
 ) => {
+    console.log(`[DATA-FLOW] Starting updateOrderStatus for PI: ${paymentIntentId}`);
+    
     // 1. Fetch current order to check for user association
     const { data: order, error: orderError } = await supabaseAdmin
         .from('orders')
@@ -153,70 +157,113 @@ export const updateOrderStatus = async (
         .single();
 
     if (orderError || !order) {
-        console.error(`Order with PI ${paymentIntentId} not found:`, orderError);
+        console.error(`[DATA-FLOW] Order with PI ${paymentIntentId} not found in DB.`);
         return;
     }
 
     let userId = order.user_id;
+    let orgId = order.organization_id;
     let magicLink = null;
-    const email = billingDetails?.email || order.billing_details?.email;
+
+    // Multi-source email extraction
+    const email = billingDetails?.email || 
+                  order.billing_details?.email || 
+                  extraStripeData?.receipt_email || 
+                  extraStripeData?.customer_email;
+                  
     const name = billingDetails?.name || order.billing_details?.name;
+
+    console.log(`[DATA-FLOW] Context - UserID: ${userId}, OrgID: ${orgId}, Email: ${email}`);
 
     // 2. User Lifecycle Management (US4)
     if (!userId && email) {
+        console.log(`[DATA-FLOW] Attempting to find/create user for email: ${email}`);
         // Find existing user by email
         const { data: userData } = await supabaseAdmin.auth.admin.listUsers();
         const existingUser = userData.users.find(u => u.email === email);
 
         if (existingUser) {
             userId = existingUser.id;
+            console.log(`[DATA-FLOW] Found existing user: ${userId}`);
         } else {
+            console.log(`[DATA-FLOW] Creating new user for: ${email}`);
             // Create new user (role: 'user')
             const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
                 email,
-                user_metadata: { full_name: name },
+                user_metadata: { 
+                    full_name: name,
+                    role: 'customer' // Pass role to the auto_join_default_org trigger
+                },
                 email_confirm: true,
                 role: 'user'
             });
 
             if (createError) {
-                console.error("Error creating user:", createError);
+                console.error("[DATA-FLOW] Error creating user:", createError);
             } else if (newUser.user) {
                 userId = newUser.user.id;
+                console.log(`[DATA-FLOW] New user created: ${userId}`);
 
                 // Generate Magic Link
+                // IMPORTANT: Use NEXT_PUBLIC_APP_URL if SITE_URL is missing
+                const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
                 const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
                     type: 'magiclink',
                     email,
-                    options: { redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/dashboard` }
+                    options: { redirectTo: `${siteUrl}/dashboard` }
                 });
 
                 if (linkError) {
-                    console.error("Error generating magic link:", linkError);
+                    console.error("[DATA-FLOW] Error generating magic link:", linkError);
                 } else {
                     magicLink = linkData.properties.action_link;
+                    console.log(`[DATA-FLOW] Magic link generated successfully.`);
                 }
             }
         }
     }
 
-    // 3. Organization Membership (Customer role)
-    if (userId && order.organization_id) {
-        const { data: existingMember } = await supabaseAdmin
-            .from('organization_members')
-            .select('id')
-            .eq('organization_id', order.organization_id)
-            .eq('user_id', userId)
-            .single();
-
-        if (!existingMember) {
-            await supabaseAdmin
+    // 3. Organization Association & Membership (Customer role)
+    // If the user was just created, the Supabase Trigger 'handle_new_user' might be running.
+    // We add a small delay and a retry to find the resulting organization_id.
+    if (userId && !orgId) {
+        console.log(`[DATA-FLOW] Searching for organization for user ${userId}...`);
+        
+        let attempts = 0;
+        while (attempts < 3 && !orgId) {
+            if (attempts > 0) {
+                console.log(`[DATA-FLOW] Org not found yet, retrying in 1.5s (attempt ${attempts + 1})...`);
+                await new Promise(resolve => setTimeout(resolve, 1500));
+            }
+            
+            const { data: orgMember } = await supabaseAdmin
                 .from('organization_members')
-                .insert({
-                    organization_id: order.organization_id,
-                    user_id: userId,
-                    role: 'customer'
-                });
+                .select('organization_id')
+                .eq('user_id', userId)
+                .limit(1);
+
+            if (orgMember && orgMember.length > 0) {
+                orgId = orgMember[0].organization_id;
+                console.log(`[DATA-FLOW] Found organization: ${orgId}`);
+            }
+            attempts++;
+        }
+    }
+
+    if (userId && orgId) {
+        // ENSURE the user has the 'customer' role record.
+        // This does NOT overwrite other roles (admin, member) because they are now separate records.
+        console.log(`[DATA-FLOW] Ensuring 'customer' role record for user ${userId} in org ${orgId}`);
+        const { error: memberError } = await supabaseAdmin
+            .from('organization_members')
+            .upsert({
+                organization_id: orgId,
+                user_id: userId,
+                role: 'customer'
+            }, { onConflict: 'organization_id,user_id,role' });
+
+        if (memberError) {
+            console.error("[DATA-FLOW] Error ensuring customer role record:", memberError);
         }
     }
 
@@ -225,7 +272,6 @@ export const updateOrderStatus = async (
         const address = billingDetails.address;
         const profileUpdate: any = {};
 
-        // Only update if current profile fields are null/empty
         const { data: profile } = await supabaseAdmin
             .from('profiles')
             .select('*')
@@ -243,6 +289,7 @@ export const updateOrderStatus = async (
             if (!profile.full_name && name) profileUpdate.full_name = name;
 
             if (Object.keys(profileUpdate).length > 0) {
+                console.log(`[DATA-FLOW] Updating profile for user ${userId}`);
                 await supabaseAdmin
                     .from('profiles')
                     .update(profileUpdate)
@@ -255,7 +302,8 @@ export const updateOrderStatus = async (
     const updateData: any = {
         status,
         billing_details: billingDetails ?? order.billing_details,
-        user_id: userId
+        user_id: userId,
+        organization_id: orgId
     };
 
     if (magicLink) {
@@ -268,7 +316,23 @@ export const updateOrderStatus = async (
         .eq('id', order.id);
 
     if (updateError) {
+        console.error("[DATA-FLOW] Final order update failed:", updateError);
         throw updateError;
     }
-    console.log(`Updated order ${order.id} to status ${status}. User: ${userId}`);
+
+    await recordActivity({
+        organizationId: orgId,
+        actorId: userId,
+        action: status === "Canceled" ? "order_cancelled" : "order_status_changed",
+        entityType: "orders",
+        entityId: order.id,
+        metadata: {
+            source: "stripe_webhook",
+            previousStatus: order.status,
+            nextStatus: status,
+            paymentIntentId,
+        },
+    });
+
+    console.log(`[DATA-FLOW] Order ${order.id} update complete. Status: ${status}, User: ${userId}, Org: ${orgId}`);
 };

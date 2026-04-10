@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { withErrorHandling } from "@/lib/supabase/errors";
+import { recordCurrentUserActivity } from "@/lib/activity-log";
 
 export async function createTask(data: {
     projectId: string;
@@ -35,6 +36,27 @@ export async function createTask(data: {
 
         if (error) throw error;
 
+        if (task) {
+            const { data: project } = await supabase
+                .from("projects")
+                .select("organization_id")
+                .eq("id", task.project_id)
+                .maybeSingle();
+
+            await recordCurrentUserActivity({
+                organizationId: project?.organization_id,
+                action: "task_created",
+                entityType: "tasks",
+                entityId: task.id,
+                metadata: {
+                    projectId: task.project_id,
+                    title: task.title,
+                    status: task.status,
+                    priority: task.priority,
+                },
+            });
+        }
+
         revalidatePath(`/dashboard/projects/${data.projectId}`);
         // Also revalidate the generic projects page if we show task counts
         revalidatePath(`/dashboard/projects`);
@@ -52,6 +74,11 @@ export async function updateTask(taskId: string, data: Partial<{
 }>) {
     return withErrorHandling(async () => {
         const supabase = await createClient();
+        const { data: existingTask } = await supabase
+            .from("tasks")
+            .select("id, project_id, title, status")
+            .eq("id", taskId)
+            .maybeSingle();
 
         const updatePayload: any = { ...data };
         // Map camelCase to snake_case
@@ -71,6 +98,40 @@ export async function updateTask(taskId: string, data: Partial<{
             .single();
 
         if (error) throw error;
+
+        if (task && existingTask && data.status && existingTask.status !== data.status) {
+            const { data: project } = await supabase
+                .from("projects")
+                .select("organization_id")
+                .eq("id", task.project_id)
+                .maybeSingle();
+
+            await recordCurrentUserActivity({
+                organizationId: project?.organization_id,
+                action: "task_status_changed",
+                entityType: "tasks",
+                entityId: task.id,
+                metadata: {
+                    projectId: task.project_id,
+                    title: task.title,
+                    previousStatus: existingTask.status,
+                    nextStatus: data.status,
+                },
+            });
+
+            if (data.status === "done") {
+                await recordCurrentUserActivity({
+                    organizationId: project?.organization_id,
+                    action: "task_completed",
+                    entityType: "tasks",
+                    entityId: task.id,
+                    metadata: {
+                        projectId: task.project_id,
+                        title: task.title,
+                    },
+                });
+            }
+        }
 
         if (task) {
             revalidatePath(`/dashboard/projects/${task.project_id}`);

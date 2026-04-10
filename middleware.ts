@@ -12,23 +12,43 @@ export async function middleware(request: NextRequest) {
         data: { user },
     } = await supabase.auth.getUser();
 
-    if (
-        !user &&
-        !request.nextUrl.pathname.startsWith("/login") &&
-        !request.nextUrl.pathname.startsWith("/signup") &&
-        !request.nextUrl.pathname.startsWith("/forgot-password") &&
-        !request.nextUrl.pathname.startsWith("/auth") &&
-        !request.nextUrl.pathname.startsWith("/api/webhooks") &&
-        !request.nextUrl.pathname.startsWith("/api/checkout") &&
-        !request.nextUrl.pathname.startsWith("/products") &&
-        !request.nextUrl.pathname.startsWith("/pricing") &&
-        !request.nextUrl.pathname.startsWith("/contact") &&
-        !request.nextUrl.pathname.startsWith("/checkout") &&
-        request.nextUrl.pathname !== "/"
-    ) {
-        // no user, potentially respond by redirecting the user to the login page
+    const pathname = request.nextUrl.pathname;
+
+    // Roteamento público (sempre permitido)
+    const isPublicPath =
+        pathname === "/" ||
+        pathname.startsWith("/login") ||
+        pathname.startsWith("/signup") ||
+        pathname.startsWith("/forgot-password") ||
+        pathname.startsWith("/auth") ||
+        pathname.startsWith("/api/webhooks") ||
+        pathname.startsWith("/api/checkout") ||
+        pathname.startsWith("/products") ||
+        pathname.startsWith("/pricing") ||
+        pathname.startsWith("/contact") ||
+        pathname.startsWith("/checkout") ||
+        pathname.startsWith("/invite");
+
+    // Roteamento explicitamente protegido
+    const protectedPaths = [
+        "/dashboard",
+        "/admin",
+        "/settings",
+        "/projects",
+        "/users",
+        "/notifications",
+        "/support",
+        "/profile",
+        "/orders",
+    ];
+
+    const isProtectedPath = protectedPaths.some(path => pathname.startsWith(path));
+
+    if (!user && isProtectedPath && !isPublicPath) {
         const url = request.nextUrl.clone();
         url.pathname = "/login";
+        // Mantém a URL original como parâmetro para redirecionar de volta após login (opcional)
+        // url.searchParams.set("next", pathname);
         return NextResponse.redirect(url);
     }
 

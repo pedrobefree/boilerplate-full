@@ -55,13 +55,24 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
 
             // Map keys if necessary, or just use as is. 
             // The select query in getMyOrganizations is: *, organization_members!inner(role)
-            const formattedOrgs = orgsData.data.map((item: any) => ({
-                id: item.id,
-                name: item.name,
-                slug: item.slug,
-                subscription_status: item.subscription_status,
-                role: item.organization_members?.[0]?.role
-            }));
+            const rolePriority = { 'owner': 4, 'admin': 3, 'member': 2, 'customer': 1 };
+            
+            const formattedOrgs = orgsData.data.map((item: any) => {
+                // Pick the highest role from the members array
+                const roles = item.organization_members?.map((m: any) => m.role) || [];
+                const highestRole = roles.reduce((prev: string, curr: string) => {
+                    return (rolePriority[curr as keyof typeof rolePriority] || 0) > 
+                           (rolePriority[prev as keyof typeof rolePriority] || 0) ? curr : prev;
+                }, roles[0]);
+
+                return {
+                    id: item.id,
+                    name: item.name,
+                    slug: item.slug,
+                    subscription_status: item.subscription_status,
+                    role: highestRole
+                };
+            });
 
             setOrganizations(formattedOrgs);
 

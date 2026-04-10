@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { withErrorHandling } from "@/lib/supabase/errors";
 import { revalidatePath } from "next/cache";
 import { sendInvitationEmail } from "./invitations";
+import { recordCurrentUserActivity } from "@/lib/activity-log";
 
 async function checkSuperAdmin() {
     const supabase = await createClient();
@@ -100,7 +101,32 @@ export async function createOrganizationAdmin(name: string, slug: string, ownerE
 
             // Send invitation email
             await sendInvitationEmail(ownerEmail, invitation.token, name);
+
+            await recordCurrentUserActivity({
+                organizationId: org.id,
+                action: "invitation_sent",
+                entityType: "invitations",
+                entityId: invitation.token,
+                metadata: {
+                    email: ownerEmail,
+                    role: "owner",
+                    source: "super_admin",
+                },
+            });
         }
+
+        await recordCurrentUserActivity({
+            organizationId: org.id,
+            action: "organization_created",
+            entityType: "organizations",
+            entityId: org.id,
+            metadata: {
+                name: org.name,
+                slug: org.slug,
+                ownerEmail,
+                source: "super_admin",
+            },
+        });
 
         revalidatePath("/admin/organizations");
         return org;
@@ -110,12 +136,31 @@ export async function createOrganizationAdmin(name: string, slug: string, ownerE
 export async function deleteOrganizationAdmin(orgId: string) {
     return withErrorHandling(async () => {
         const supabase = await checkSuperAdmin();
+        const { data: organization } = await supabase
+            .from("organizations")
+            .select("id, name, slug")
+            .eq("id", orgId)
+            .maybeSingle();
+
         const { error } = await supabase
             .from("organizations")
             .delete()
             .eq("id", orgId);
 
         if (error) throw error;
+
+        await recordCurrentUserActivity({
+            organizationId: orgId,
+            action: "organization_deleted",
+            entityType: "organizations",
+            entityId: orgId,
+            metadata: {
+                name: organization?.name,
+                slug: organization?.slug,
+                source: "super_admin",
+            },
+        });
+
         revalidatePath("/admin/organizations");
     });
 }
@@ -194,6 +239,18 @@ export async function addUserToOrganizationAdmin(orgId: string, email: string, r
 
             // Send invitation email
             await sendInvitationEmail(email, invitation.token, org?.name || "the team");
+
+            await recordCurrentUserActivity({
+                organizationId: orgId,
+                action: "invitation_sent",
+                entityType: "invitations",
+                entityId: invitation.token,
+                metadata: {
+                    email,
+                    role,
+                    source: "super_admin",
+                },
+            });
         }
 
         revalidatePath("/admin/organizations");
@@ -232,6 +289,17 @@ export async function updateOrganizationAdmin(orgId: string, data: { name: strin
             .eq("id", orgId);
 
         if (error) throw error;
+
+        await recordCurrentUserActivity({
+            organizationId: orgId,
+            action: "organization_updated",
+            entityType: "organizations",
+            entityId: orgId,
+            metadata: {
+                updates: data,
+                source: "super_admin",
+            },
+        });
 
         revalidatePath("/admin/organizations");
         return { success: true };

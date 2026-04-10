@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { withErrorHandling } from "@/lib/supabase/errors";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
+import { recordCurrentUserActivity } from "@/lib/activity-log";
 
 const ACTIVE_ORG_COOKIE = "current_org_id";
 
@@ -27,13 +28,12 @@ export async function updateOrganizationDetails(data: {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error("Unauthorized");
 
-        const [{ data: member }, { data: profile }] = await Promise.all([
+        const [{ data: members }, { data: profile }] = await Promise.all([
             supabase
                 .from("organization_members")
                 .select("role")
                 .eq("organization_id", orgId)
-                .eq("user_id", user.id)
-                .maybeSingle(),
+                .eq("user_id", user.id),
             supabase
                 .from("profiles")
                 .select("role")
@@ -41,11 +41,13 @@ export async function updateOrganizationDetails(data: {
                 .maybeSingle()
         ]);
 
-        const isOwner = member?.role === "owner";
+        const roles = members?.map(m => m.role) || [];
+        const isOwner = roles.includes("owner");
+        const isAdmin = roles.includes("admin");
         const isSuperAdmin = profile?.role === "super_admin";
 
-        if (!isOwner && !isSuperAdmin) {
-            throw new Error("Only organization owners can modify organization settings.");
+        if (!isOwner && !isAdmin && !isSuperAdmin) {
+            throw new Error("Only organization owners or admins can modify organization settings.");
         }
 
         const { error } = await supabase
@@ -54,6 +56,16 @@ export async function updateOrganizationDetails(data: {
             .eq("id", orgId);
 
         if (error) throw error;
+
+        await recordCurrentUserActivity({
+            organizationId: orgId,
+            action: "organization_updated",
+            entityType: "organizations",
+            entityId: orgId,
+            metadata: {
+                updates: data,
+            },
+        });
 
         revalidatePath("/settings");
         revalidatePath("/users");
@@ -91,6 +103,17 @@ export async function createOrganization(name: string, slug: string) {
             });
 
         if (memberError) throw memberError;
+
+        await recordCurrentUserActivity({
+            organizationId: org.id,
+            action: "organization_created",
+            entityType: "organizations",
+            entityId: org.id,
+            metadata: {
+                name: org.name,
+                slug: org.slug,
+            },
+        });
 
         revalidatePath("/dashboard");
         return org;

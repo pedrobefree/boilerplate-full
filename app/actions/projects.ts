@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { withErrorHandling } from "@/lib/supabase/errors";
+import { recordCurrentUserActivity } from "@/lib/activity-log";
 
 export async function createProject(data: {
     organizationId: string;
@@ -50,6 +51,17 @@ export async function createProject(data: {
             throw memberError;
         }
 
+        await recordCurrentUserActivity({
+            organizationId: project.organization_id,
+            action: "project_created",
+            entityType: "projects",
+            entityId: project.id,
+            metadata: {
+                name: project.name,
+                status: project.status,
+            },
+        });
+
         revalidatePath(`/dashboard/projects`);
         return project;
     }, { action: "createProject", name: data.name });
@@ -65,6 +77,11 @@ export async function updateProject(id: string, data: Partial<{
 }>) {
     return withErrorHandling(async () => {
         const supabase = await createClient();
+        const { data: existingProject } = await supabase
+            .from("projects")
+            .select("id, organization_id, name, status")
+            .eq("id", id)
+            .maybeSingle();
 
         // Map camelCase to snake_case for DB
         const updatePayload: any = {};
@@ -84,6 +101,28 @@ export async function updateProject(id: string, data: Partial<{
             .single();
 
         if (error) throw error;
+
+        if (project) {
+            const nextStatus = project.status;
+            const previousStatus = existingProject?.status;
+            const archivedStatuses = new Set(["inactive", "canceled", "archived"]);
+
+            await recordCurrentUserActivity({
+                organizationId: project.organization_id,
+                action:
+                    previousStatus !== nextStatus && archivedStatuses.has(nextStatus)
+                        ? "project_archived"
+                        : "project_updated",
+                entityType: "projects",
+                entityId: project.id,
+                metadata: {
+                    name: project.name,
+                    previousStatus,
+                    nextStatus,
+                    updates: data,
+                },
+            });
+        }
 
         revalidatePath(`/dashboard/projects`);
         revalidatePath(`/dashboard/projects/${id}`);

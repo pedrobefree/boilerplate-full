@@ -29,12 +29,12 @@ O comando `stripe listen` gera um webhook signing secret temporário a cada exec
 ## Módulo 1 — Páginas de Erro e Error Boundaries
 
 ### Checklist
-- [ ] Criar `app/not-found.tsx` global com layout consistente ao da aplicação
-- [ ] Criar `app/error.tsx` global como Client Component com boundary de erro
-- [ ] Criar `app/(dashboard)/error.tsx` para erros dentro do painel admin
-- [ ] Criar `app/(marketing)/error.tsx` para erros nas páginas públicas
-- [ ] Garantir que todos os `error.tsx` exponham botão de retry e link para home
-- [ ] Testar acesso a rotas inexistentes em todas as áreas (marketing, dashboard, admin)
+- [x] Criar `app/not-found.tsx` global com layout consistente ao da aplicação
+- [x] Criar `app/error.tsx` global como Client Component com boundary de erro
+- [x] Criar `app/(dashboard)/error.tsx` para erros dentro do painel admin
+- [x] Criar `app/(marketing)/error.tsx` para erros nas páginas públicas
+- [x] Garantir que todos os `error.tsx` exponham botão de retry e link para home
+- [x] Testar acesso a rotas inexistentes em todas as áreas (marketing, dashboard, admin)
 
 ### Histórias de Usuário
 
@@ -60,13 +60,13 @@ Critérios de aceitação:
 ## Módulo 2 — Busca e Filtro de Produtos
 
 ### Checklist
-- [ ] Adicionar campo de busca por nome na página de catálogo (`/products`)
-- [ ] Implementar filtro por categoria (dropdown ou sidebar)
-- [ ] Implementar filtro por tag
-- [ ] Adicionar ordenação: por nome (A-Z, Z-A), por preço (menor/maior)
-- [ ] Garantir que os filtros funcionem via URL params (search params), permitindo compartilhamento de URL filtrada
-- [ ] Implementar estado de "nenhum resultado encontrado" com componente `EmptyState`
-- [ ] Garantir que a busca funcione via server-side (query no Supabase), não client-side
+- [x] Adicionar campo de busca por nome na página de catálogo (`/products`)
+- [x] Implementar filtro por categoria (dropdown ou sidebar)
+- [x] Implementar filtro por tag
+- [x] Adicionar ordenação: por nome (A-Z, Z-A), por preço (menor/maior)
+- [x] Garantir que os filtros funcionem via URL params (search params), permitindo compartilhamento de URL filtrada
+- [x] Implementar estado de "nenhum resultado encontrado" com componente `EmptyState`
+- [x] Garantir que a busca funcione via server-side (query no Supabase), não client-side
 
 ### Histórias de Usuário
 
@@ -100,18 +100,18 @@ Critérios de aceitação:
 ## Módulo 3 — Activity Log (Registro de Eventos)
 
 ### Checklist
-- [ ] Revisar schema da tabela `activity_logs` e garantir campos: `id`, `organization_id`, `actor_id`, `action`, `entity_type`, `entity_id`, `metadata` (JSON), `created_at`
-- [ ] Criar função utilitária `lib/activity-log.ts` para registrar eventos
-- [ ] Registrar eventos nas actions de autenticação: login, logout
-- [ ] Registrar eventos nas actions de organização: criação, atualização, exclusão
-- [ ] Registrar eventos nas actions de convites: enviado, aceito, cancelado
-- [ ] Registrar eventos nas actions de usuários: role alterado, membro removido
-- [ ] Registrar eventos nas actions de pedidos: pedido criado, status alterado, cancelado
-- [ ] Registrar eventos nas actions de projetos: projeto criado, atualizado, arquivado
-- [ ] Registrar eventos nas actions de tarefas: tarefa criada, status alterado, concluída
-- [ ] Implementar UI de listagem de activity log no admin (`/admin/activity`)
-- [ ] Implementar filtros na listagem: por tipo de evento, por ator, por período
-- [ ] Garantir RLS: membros veem apenas eventos da sua organização; super admins veem tudo
+- [x] Revisar schema da tabela `activity_logs` e garantir campos: `id`, `organization_id`, `actor_id`, `action`, `entity_type`, `entity_id`, `metadata` (JSON), `created_at`
+- [x] Criar função utilitária `lib/activity-log.ts` para registrar eventos
+- [x] Registrar eventos nas actions de autenticação: login, logout
+- [x] Registrar eventos nas actions de organização: criação, atualização, exclusão
+- [x] Registrar eventos nas actions de convites: enviado, aceito, cancelado
+- [x] Registrar eventos nas actions de usuários: role alterado, membro removido
+- [x] Registrar eventos nas actions de pedidos: pedido criado, status alterado, cancelado
+- [x] Registrar eventos nas actions de projetos: projeto criado, atualizado, arquivado
+- [x] Registrar eventos nas actions de tarefas: tarefa criada, status alterado, concluída
+- [x] Implementar UI de listagem de activity log no admin (`/admin/activity`)
+- [x] Implementar filtros na listagem: por tipo de evento, por ator, por período
+- [x] Garantir RLS: membros veem apenas eventos da sua organização; super admins veem tudo
 
 ### Histórias de Usuário
 
