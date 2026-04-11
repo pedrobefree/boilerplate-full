@@ -145,7 +145,7 @@ export const updateOrderStatus = async (
     paymentIntentId: string,
     status: 'Payment Approved' | 'Canceled' | 'Pending Delivery' | 'Completed' | 'Waiting for Payment',
     billingDetails?: any,
-    extraStripeData?: { receipt_email?: string | null, customer_email?: string | null }
+    extraStripeData?: { receipt_email?: string | null, customer_email?: string | null, payment_method_id?: string | null }
 ) => {
     console.log(`[DATA-FLOW] Starting updateOrderStatus for PI: ${paymentIntentId}`);
     
@@ -187,7 +187,7 @@ export const updateOrderStatus = async (
             console.log(`[DATA-FLOW] Found existing user: ${userId}`);
         } else {
             console.log(`[DATA-FLOW] Creating new user for: ${email}`);
-            // Create new user (role: 'user')
+            // Create new user
             const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
                 email,
                 user_metadata: { 
@@ -195,7 +195,7 @@ export const updateOrderStatus = async (
                     role: 'customer' // Pass role to the auto_join_default_org trigger
                 },
                 email_confirm: true,
-                role: 'user'
+                role: 'authenticated'
             });
 
             if (createError) {
@@ -210,14 +210,14 @@ export const updateOrderStatus = async (
                 const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
                     type: 'magiclink',
                     email,
-                    options: { redirectTo: `${siteUrl}/dashboard` }
+                    options: { redirectTo: `${siteUrl}/auth/confirm` }
                 });
 
                 if (linkError) {
                     console.error("[DATA-FLOW] Error generating magic link:", linkError);
                 } else {
                     magicLink = linkData.properties.action_link;
-                    console.log(`[DATA-FLOW] Magic link generated successfully.`);
+                    console.log(`[DATA-FLOW] Magic link generated. action_link: ${magicLink}`);
                 }
             }
         }
@@ -295,6 +295,47 @@ export const updateOrderStatus = async (
                     .update(profileUpdate)
                     .eq('id', userId);
             }
+        }
+    }
+
+    // 4.5 Stripe Customer & Payment Method Sync
+    if (orgId && extraStripeData?.payment_method_id) {
+        // Find existing organization stripe_customer_id
+        const { data: orgData } = await supabaseAdmin
+             .from('organizations')
+             .select('stripe_customer_id, name')
+             .eq('id', orgId)
+             .single();
+             
+        let stripeCustomerId = orgData?.stripe_customer_id;
+        
+        if (!stripeCustomerId && email) {
+            console.log(`[DATA-FLOW] Creating Stripe Customer for org ${orgId}`);
+            try {
+                const customer = await stripe.customers.create({
+                    email,
+                    name: orgData?.name || name,
+                    metadata: { organization_id: orgId }
+                });
+                stripeCustomerId = customer.id;
+                
+                await supabaseAdmin
+                    .from('organizations')
+                    .update({ stripe_customer_id: customer.id })
+                    .eq('id', orgId);
+                console.log(`[DATA-FLOW] Stripe Customer ${stripeCustomerId} created and linked to org ${orgId}`);
+            } catch (err) {
+                 console.error("[DATA-FLOW] Error creating Stripe Customer:", err);
+            }
+        }
+        
+        if (stripeCustomerId && extraStripeData.payment_method_id) {
+             console.log(`[DATA-FLOW] Attaching PM ${extraStripeData.payment_method_id} to customer ${stripeCustomerId}`);
+             try {
+                  await stripe.paymentMethods.attach(extraStripeData.payment_method_id, { customer: stripeCustomerId });
+             } catch (err) {
+                  console.error("[DATA-FLOW] Error attaching PM (may already be attached):", err);
+             }
         }
     }
 

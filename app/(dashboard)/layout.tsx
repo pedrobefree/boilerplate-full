@@ -1,33 +1,29 @@
-"use client";
-
-import { AppShell } from "@/components/layout/AppShell";
-import { usePathname } from "next/navigation";
-import { OrganizationProvider } from "@/app/context/OrganizationContext";
-import { ProtectedRoute } from "@/components/features/auth/ProtectedRoute";
-import { PendingInvitesModal } from "@/components/features/dashboard/PendingInvitesModal";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { getUserAccessContext } from "@/lib/auth/redirects";
+import DashboardLayoutClient from "@/components/features/dashboard/DashboardLayoutClient";
 
 /**
  * Dashboard Layout
  * Wraps all dashboard pages in the sidebar and top navigation.
  */
-export default function DashboardLayout({
+export default async function DashboardLayout({
     children,
 }: {
     children: React.ReactNode;
 }) {
-    const pathname = usePathname();
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    // Extract view name from pathname for AppShell's active state
-    const currentView = pathname.split("/").pop() || "dashboard";
+    if (!user) {
+        redirect("/login");
+    }
 
-    return (
-        <ProtectedRoute>
-            <OrganizationProvider>
-                <AppShell currentView={currentView}>
-                    {children}
-                </AppShell>
-                <PendingInvitesModal />
-            </OrganizationProvider>
-        </ProtectedRoute>
-    );
+    const access = await getUserAccessContext(supabase, user.id);
+
+    if (!access.hasDashboardAccess) {
+        redirect("/orders");
+    }
+
+    return <DashboardLayoutClient>{children}</DashboardLayoutClient>;
 }

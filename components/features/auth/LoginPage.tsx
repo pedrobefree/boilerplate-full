@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
 import { logAuthEvent } from "@/app/actions/activity-logs";
+import { getUserAccessContext, resolveAuthorizedPath } from "@/lib/auth/redirects";
 
 export const LoginPage = () => {
     const router = useRouter();
@@ -48,13 +49,18 @@ export const LoginPage = () => {
 
             await logAuthEvent("login");
 
+            const { data: { user } } = await supabase.auth.getUser();
+            const targetPath = user
+                ? resolveAuthorizedPath(await getUserAccessContext(supabase, user.id))
+                : "/dashboard";
+
             addToast({
                 title: "Welcome back!",
                 description: "You have successfully logged in.",
                 type: "success",
             });
 
-            router.push("/dashboard");
+            router.push(targetPath);
             router.refresh();
         } catch (err: any) {
             const errorMessage = err.message || "Invalid email or password.";

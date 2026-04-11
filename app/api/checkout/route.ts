@@ -94,7 +94,7 @@ export async function POST(req: Request) {
             amount: totalAmount,
             currency: currency,
             customer: stripeCustomerId,
-            // In the latest api versions, automatic_payment_methods is default, but we specify it for clarity
+            setup_future_usage: 'off_session', // CRITICAL: Makes the Payment Method reusable so we can attach it to the guest's future Customer record
             automatic_payment_methods: {
                 enabled: true,
             },

@@ -67,7 +67,7 @@ export function DataTable<T>({
     const isIndeterminate = selectedIds.length > 0 && selectedIds.length < data.length;
 
     return (
-        <div className="overflow-hidden rounded-xl border border-gray-200 shadow-sm bg-white">
+        <div className="overflow-visible rounded-xl border border-gray-200 shadow-sm bg-white">
             <Table>
                 <TableHeader>
                     <TableRow>

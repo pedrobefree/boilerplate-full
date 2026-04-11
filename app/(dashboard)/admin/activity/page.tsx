@@ -1,5 +1,5 @@
 import { ActivityLog } from "@/components/features/admin/ActivityLog";
-import { getActivityLogFilterOptions, getActivityLogs } from "@/app/actions/activity-logs";
+import { getActivityLogFilterOptions, getActivityLogs, getOrderActivityLogsForOrders } from "@/app/actions/activity-logs";
 
 type PageProps = {
     searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -41,11 +41,22 @@ export default async function ActivityLogPage({ searchParams }: PageProps) {
         return <div className="p-6 text-red-500">Failed to load activity log filters: {optionsResponse.error}</div>;
     }
 
+    const orderIds = Array.from(
+        new Set(
+            (logsResponse.data.logs as any[])
+                .filter((log) => log.entity_type === "orders" && log.entity_id)
+                .map((log) => log.entity_id as string)
+        )
+    );
+
+    const orderHistoriesResponse = await getOrderActivityLogsForOrders(orderIds);
+    const orderHistories = orderHistoriesResponse.success ? orderHistoriesResponse.data : {};
     const totalPages = Math.max(1, Math.ceil(logsResponse.data.count / 20));
 
     return (
         <ActivityLog
             logs={logsResponse.data.logs as any[]}
+            orderHistories={orderHistories}
             totalCount={logsResponse.data.count}
             page={page}
             totalPages={totalPages}

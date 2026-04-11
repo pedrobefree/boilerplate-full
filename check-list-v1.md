@@ -112,6 +112,9 @@ Critérios de aceitação:
 - [x] Implementar UI de listagem de activity log no admin (`/admin/activity`)
 - [x] Implementar filtros na listagem: por tipo de evento, por ator, por período
 - [x] Garantir RLS: membros veem apenas eventos da sua organização; super admins veem tudo
+- [x] Implementar visualização estruturada de `metadata` nos eventos do activity log
+- [x] Implementar opção de visualizar histórico agrupado de eventos por pedido na listagem global
+- [x] Implementar seção de activity log do pedido na página de detalhes do pedido
 
 ### Histórias de Usuário
 
@@ -136,6 +139,30 @@ Critérios de aceitação:
 - No painel super admin, o activity log exibe eventos de todas as organizações
 - Inclui coluna/filtro de organização na listagem
 - Acesso restrito ao papel `super_admin`
+
+**US3.4** — Eu como administrador, quero visualizar os metadados completos de um evento para entender o contexto exato da ação registrada.
+
+Critérios de aceitação:
+- Cada linha do activity log possui um ícone de detalhes na última coluna
+- Ao passar o mouse sobre o ícone, é exibido um painel com os `metadata` estruturados do evento
+- A visualização suporta valores simples e objetos aninhados
+- A ausência de metadados é tratada com uma mensagem clara
+
+**US3.5** — Eu como administrador, quero visualizar o histórico agrupado de eventos de um pedido dentro do activity log global para acompanhar a evolução daquele pedido.
+
+Critérios de aceitação:
+- Eventos do tipo `orders` exibem uma ação adicional para visualizar o histórico agrupado do pedido
+- O histórico agrupado mostra os principais eventos do pedido em ordem cronológica
+- O agrupamento identifica claramente o número curto do pedido
+- A visualização funciona sem sair da listagem global
+
+**US3.6** — Eu como administrador, quero ver o histórico de activity log diretamente na página de detalhes do pedido para ter contexto operacional completo.
+
+Critérios de aceitação:
+- A página de detalhes do pedido exibe uma seção dedicada ao activity log do pedido
+- A seção lista eventos em ordem cronológica com ator, data/hora e detalhes relevantes
+- Os metadados do evento podem ser visualizados nessa seção
+- O histórico reflete eventos como criação, alteração de status e cancelamento
 
 ---
 

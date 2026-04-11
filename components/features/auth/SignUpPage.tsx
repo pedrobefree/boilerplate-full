@@ -11,6 +11,7 @@ import { createOrganization } from "@/app/actions/organizations";
 import { acceptInvitation, getInvitationByToken } from "@/app/actions/invitations";
 import { useToast } from "@/components/ui/Toast";
 import { Building, Loader2 } from "lucide-react";
+import { getUserAccessContext, resolveAuthorizedPath } from "@/lib/auth/redirects";
 
 export const SignUpPage = () => {
     const router = useRouter();
@@ -127,7 +128,11 @@ export const SignUpPage = () => {
                     });
                 }
 
-                router.push("/dashboard");
+                const targetPath = resolveAuthorizedPath(
+                    await getUserAccessContext(supabase, authData.user.id)
+                );
+
+                router.push(targetPath);
             }
         } catch (err: any) {
             const errorMessage = err.message || "Something went wrong. Please try again.";

@@ -188,6 +188,88 @@ export async function getActivityLogFilterOptions() {
     });
 }
 
+export async function getOrderActivityLogs(orderId: string) {
+    return withErrorHandling(async () => {
+        const supabase = await createClient();
+        const {
+            data: { user },
+        } = await supabase.auth.getUser();
+
+        if (!user) {
+            throw new Error("Unauthorized");
+        }
+
+        const { data, error } = await supabase
+            .from("activity_logs")
+            .select(`
+                id,
+                organization_id,
+                actor_id,
+                action,
+                entity_type,
+                entity_id,
+                metadata,
+                created_at,
+                actor:profiles!activity_logs_actor_id_fkey(id, full_name, email, avatar_url)
+            `)
+            .eq("entity_type", "orders")
+            .eq("entity_id", orderId)
+            .order("created_at", { ascending: true });
+
+        if (error) throw error;
+        return data ?? [];
+    });
+}
+
+export async function getOrderActivityLogsForOrders(orderIds: string[]) {
+    return withErrorHandling(async () => {
+        if (orderIds.length === 0) {
+            return {} as Record<string, any[]>;
+        }
+
+        const supabase = await createClient();
+        const {
+            data: { user },
+        } = await supabase.auth.getUser();
+
+        if (!user) {
+            throw new Error("Unauthorized");
+        }
+
+        const { data, error } = await supabase
+            .from("activity_logs")
+            .select(`
+                id,
+                organization_id,
+                actor_id,
+                action,
+                entity_type,
+                entity_id,
+                metadata,
+                created_at,
+                actor:profiles!activity_logs_actor_id_fkey(id, full_name, email, avatar_url)
+            `)
+            .eq("entity_type", "orders")
+            .in("entity_id", orderIds)
+            .order("created_at", { ascending: true });
+
+        if (error) throw error;
+
+        return (data ?? []).reduce<Record<string, any[]>>((accumulator, log) => {
+            if (!log.entity_id) {
+                return accumulator;
+            }
+
+            if (!accumulator[log.entity_id]) {
+                accumulator[log.entity_id] = [];
+            }
+
+            accumulator[log.entity_id].push(log);
+            return accumulator;
+        }, {});
+    });
+}
+
 export async function logAuthEvent(action: "login" | "logout") {
     return withErrorHandling(async () => {
         await recordCurrentUserActivity({

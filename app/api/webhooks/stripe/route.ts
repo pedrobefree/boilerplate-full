@@ -84,7 +84,8 @@ export async function POST(req: Request) {
                         charge?.billing_details, // Pass the entire billing_details object
                         {
                             receipt_email: expandedPi.receipt_email,
-                            customer_email: (expandedPi as any).customer_details?.email // sometimes hidden here
+                            customer_email: (expandedPi as any).customer_details?.email, // sometimes hidden here
+                            payment_method_id: typeof expandedPi.payment_method === 'string' ? expandedPi.payment_method : expandedPi.payment_method?.id
                         }
                     );
                     break;

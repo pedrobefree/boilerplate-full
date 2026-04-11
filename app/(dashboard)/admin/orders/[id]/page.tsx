@@ -1,9 +1,10 @@
 import { getOrderById, getPaymentIntentDetails } from "@/app/actions/orders";
+import { getOrderActivityLogs } from "@/app/actions/activity-logs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, History } from "lucide-react";
 import { OrderStatusUpdate } from "./OrderStatusUpdate";
 
 export const dynamic = 'force-dynamic';
@@ -15,11 +16,6 @@ export default async function OrderDetailsPage({
 }) {
     const { id } = await params;
     const order = await getOrderById(id);
-
-    let paymentDetails = null;
-    if (order?.stripe_payment_intent_id) {
-        paymentDetails = await getPaymentIntentDetails(order.stripe_payment_intent_id);
-    }
 
     if (!order) {
         return (
@@ -38,11 +34,51 @@ export default async function OrderDetailsPage({
         );
     }
 
+    const [paymentDetails, orderActivityResponse] = await Promise.all([
+        order?.stripe_payment_intent_id ? getPaymentIntentDetails(order.stripe_payment_intent_id) : Promise.resolve(null),
+        getOrderActivityLogs(id),
+    ]);
+
+    const orderActivityLogs = orderActivityResponse.success ? orderActivityResponse.data : [];
+
     const formatPrice = (amount: number, currency: string) => {
         return new Intl.NumberFormat('en-US', {
             style: 'currency',
             currency: currency.toUpperCase()
         }).format(amount / 100);
+    };
+
+    const formatMetadataLabel = (key: string) =>
+        key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/_/g, " ");
+
+    const formatMetadataValue = (key: string, value: unknown, metadata: Record<string, any>) => {
+        const normalizedKey = key.toLowerCase();
+        const currency = typeof metadata.currency === "string"
+            ? metadata.currency
+            : typeof metadata.currency_code === "string"
+                ? metadata.currency_code
+                : typeof metadata.currencyCode === "string"
+                    ? metadata.currencyCode
+                    : order.currency;
+
+        if (
+            (
+                normalizedKey === "total_amount" ||
+                normalizedKey === "amount" ||
+                normalizedKey === "unit_amount" ||
+                normalizedKey.endsWith("_amount") ||
+                normalizedKey.endsWith("amount")
+            ) &&
+            (typeof value === "number" || (typeof value === "string" && !Number.isNaN(Number(value))))
+        ) {
+            return formatPrice(Number(value), currency);
+        }
+
+        if (typeof value === "object" && value !== null) {
+            return JSON.stringify(value, null, 2);
+        }
+
+        return String(value);
     };
 
     const getStatusVariant = (status: string) => {
@@ -71,6 +107,11 @@ export default async function OrderDetailsPage({
     const latestCharge = paymentDetails?.latest_charge || paymentDetails?.charges?.data?.[0]; // Fallback if latest_charge is not expanded but charges collection is present
     const paymentMethodDetails = latestCharge?.payment_method_details || paymentDetails?.payment_method?.card ? { card: paymentDetails.payment_method.card } : null;
     const receiptUrl = latestCharge?.receipt_url;
+    const actionLabels: Record<string, string> = {
+        order_created: "Order created",
+        order_status_changed: "Order status changed",
+        order_cancelled: "Order cancelled",
+    };
 
     return (
         <div className="max-w-5xl mx-auto space-y-6">
@@ -263,6 +304,70 @@ export default async function OrderDetailsPage({
                     </CardContent>
                 </Card>
             </div>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                        <History className="size-5 text-gray-400" />
+                        Order Activity
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    {orderActivityLogs.length > 0 ? (
+                        <div className="space-y-4">
+                            {orderActivityLogs.map((log: any) => {
+                                const actor = Array.isArray(log.actor) ? log.actor[0] : log.actor;
+
+                                return (
+                                    <div key={log.id} className="flex gap-4 border-l-2 border-gray-200 pl-4">
+                                        <div className="pt-0.5">
+                                            <Avatar
+                                                src={actor?.avatar_url || undefined}
+                                                alt={actor?.full_name || actor?.email || "System"}
+                                                size="sm"
+                                            />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                                <div>
+                                                    <p className="text-sm font-semibold text-gray-900">
+                                                        {actionLabels[log.action] || log.action}
+                                                    </p>
+                                                    <p className="text-xs text-gray-500">
+                                                        {actor?.full_name || actor?.email || "System"}
+                                                    </p>
+                                                </div>
+                                                <p className="text-xs text-gray-500">
+                                                    {new Date(log.created_at).toLocaleString()}
+                                                </p>
+                                            </div>
+
+                                            {log.metadata && Object.keys(log.metadata).length > 0 ? (
+                                                <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 p-3">
+                                                    <div className="grid gap-2 sm:grid-cols-2">
+                                                        {Object.entries(log.metadata).map(([key, value]) => (
+                                                            <div key={key}>
+                                                                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                                                                    {formatMetadataLabel(key)}
+                                                                </p>
+                                                                <p className="mt-1 text-sm text-gray-700 break-words whitespace-pre-wrap">
+                                                                    {formatMetadataValue(key, value, log.metadata)}
+                                                                </p>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ) : (
+                        <p className="text-sm text-gray-500">No activity recorded for this order yet.</p>
+                    )}
+                </CardContent>
+            </Card>
         </div>
     );
 }

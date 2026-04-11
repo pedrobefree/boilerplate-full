@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { CalendarDays, Filter, X } from "lucide-react";
+import { CalendarDays, Eye, Filter, History, X } from "lucide-react";
 import { format } from "date-fns";
+import { createPortal } from "react-dom";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -32,6 +33,7 @@ type Option = {
 
 type ActivityLogProps = {
     logs: ActivityRecord[];
+    orderHistories: Record<string, ActivityRecord[]>;
     totalCount: number;
     page: number;
     totalPages: number;
@@ -119,7 +121,185 @@ function describeTarget(log: ActivityRecord) {
     return metadata.label || log.entity_id || "Activity";
 }
 
-export const ActivityLog = ({ logs, totalCount, page, totalPages, filters, options }: ActivityLogProps) => {
+function formatMetadataLabel(key: string) {
+    return key
+        .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatMetadataValue(value: unknown): string {
+    if (value === null || value === undefined) {
+        return "N/A";
+    }
+
+    if (typeof value === "boolean") {
+        return value ? "Yes" : "No";
+    }
+
+    if (typeof value === "number") {
+        return String(value);
+    }
+
+    if (typeof value === "string") {
+        return value;
+    }
+
+    return JSON.stringify(value, null, 2);
+}
+
+function formatCurrencyAmount(amount: number, currency: string) {
+    return new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: currency.toUpperCase(),
+    }).format(amount / 100);
+}
+
+function formatMetadataEntryValue(
+    key: string,
+    value: unknown,
+    context?: Record<string, unknown> | null
+) {
+    const normalizedKey = key.toLowerCase();
+    const contextCurrency = typeof context?.currency === "string"
+        ? context.currency
+        : typeof context?.currency_code === "string"
+            ? context.currency_code
+            : typeof context?.currencyCode === "string"
+                ? context.currencyCode
+                : null;
+
+    if (
+        contextCurrency &&
+        (
+            normalizedKey === "total_amount" ||
+            normalizedKey === "amount" ||
+            normalizedKey === "unit_amount" ||
+            normalizedKey.endsWith("_amount") ||
+            normalizedKey.endsWith("amount")
+        ) &&
+        (typeof value === "number" || (typeof value === "string" && !Number.isNaN(Number(value))))
+    ) {
+        return formatCurrencyAmount(Number(value), contextCurrency);
+    }
+
+    return formatMetadataValue(value);
+}
+
+function MetadataValue({
+    value,
+    context,
+    parentKey,
+}: {
+    value: unknown;
+    context?: Record<string, unknown> | null;
+    parentKey?: string;
+}) {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+        return (
+            <div className="space-y-2">
+                {Object.entries(value as Record<string, unknown>).map(([nestedKey, nestedValue]) => (
+                    <div key={nestedKey} className="rounded-md border border-gray-100 bg-gray-50 px-3 py-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                            {formatMetadataLabel(nestedKey)}
+                        </p>
+                        <div className="mt-1 text-xs text-gray-700">
+                            <MetadataValue value={nestedValue} context={context ?? (value as Record<string, unknown>)} parentKey={nestedKey} />
+                        </div>
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
+    if (Array.isArray(value)) {
+        return (
+            <div className="space-y-1">
+                {value.map((item, index) => (
+                    <div key={index} className="rounded-md border border-gray-100 bg-gray-50 px-3 py-2 text-xs text-gray-700">
+                        <MetadataValue value={item} context={context} parentKey={parentKey} />
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
+    return (
+        <span className="break-words whitespace-pre-wrap">
+            {parentKey ? formatMetadataEntryValue(parentKey, value, context) : formatMetadataValue(value)}
+        </span>
+    );
+}
+
+function HoverPanel({
+    icon,
+    label,
+    children,
+}: {
+    icon: ReactNode;
+    label: string;
+    children: ReactNode;
+}) {
+    const triggerRef = useRef<HTMLButtonElement | null>(null);
+    const [isOpen, setIsOpen] = useState(false);
+    const [position, setPosition] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+
+    const updatePosition = () => {
+        const rect = triggerRef.current?.getBoundingClientRect();
+        if (!rect) return;
+
+        setPosition({
+            top: rect.top - 12,
+            left: Math.min(window.innerWidth - 336, Math.max(16, rect.right - 320)),
+        });
+    };
+
+    useEffect(() => {
+        if (!isOpen) return;
+
+        updatePosition();
+        window.addEventListener("scroll", updatePosition, true);
+        window.addEventListener("resize", updatePosition);
+
+        return () => {
+            window.removeEventListener("scroll", updatePosition, true);
+            window.removeEventListener("resize", updatePosition);
+        };
+    }, [isOpen]);
+
+    return (
+        <div
+            className="relative"
+            onMouseEnter={() => {
+                updatePosition();
+                setIsOpen(true);
+            }}
+            onMouseLeave={() => setIsOpen(false)}
+        >
+            <button
+                ref={triggerRef}
+                type="button"
+                aria-label={label}
+                className="inline-flex size-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 transition-colors hover:border-brand-200 hover:text-brand-600"
+            >
+                {icon}
+            </button>
+            {isOpen
+                ? createPortal(
+                    <div
+                        className="pointer-events-none fixed z-[200] w-80 -translate-y-full rounded-xl border border-gray-200 bg-white p-4 shadow-2xl ring-1 ring-black/5"
+                        style={{ top: position.top, left: position.left }}
+                    >
+                        {children}
+                    </div>,
+                    document.body
+                )
+                : null}
+        </div>
+    );
+}
+
+export const ActivityLog = ({ logs, orderHistories, totalCount, page, totalPages, filters, options }: ActivityLogProps) => {
     const router = useRouter();
     const pathname = usePathname();
     const searchParams = useSearchParams();
@@ -286,6 +466,91 @@ export const ActivityLog = ({ logs, totalCount, page, totalPages, filters, optio
                     </span>
                 </div>
             ),
+        },
+        {
+            header: "Details",
+            className: "w-28 relative z-[70] overflow-visible",
+            cell: (log: ActivityRecord) => {
+                const metadata = log.metadata ?? {};
+                const orderHistory = log.entity_id ? orderHistories[log.entity_id] ?? [] : [];
+
+                return (
+                    <div className="flex items-center justify-end gap-2">
+                        <HoverPanel
+                            icon={<Eye className="size-4" />}
+                            label="View metadata"
+                        >
+                            <div className="space-y-3">
+                                <div>
+                                    <p className="text-sm font-semibold text-gray-900">Metadata</p>
+                                    <p className="text-xs text-gray-500">Structured event details</p>
+                                </div>
+                                {Object.keys(metadata).length > 0 ? (
+                                    <div className="space-y-2">
+                                        {Object.entries(metadata).map(([key, value]) => (
+                                            <div key={key}>
+                                                <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                                                    {formatMetadataLabel(key)}
+                                                </p>
+                                                <div className="text-xs text-gray-700">
+                                                    {value && typeof value === "object" ? (
+                                                        <MetadataValue value={value} context={metadata} parentKey={key} />
+                                                    ) : (
+                                                        <span className="break-words whitespace-pre-wrap">
+                                                            {formatMetadataEntryValue(key, value, metadata)}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-xs text-gray-500">No metadata available for this event.</p>
+                                )}
+                            </div>
+                        </HoverPanel>
+
+                        {log.entity_type === "orders" && log.entity_id ? (
+                            <HoverPanel
+                                icon={<History className="size-4" />}
+                                label="View order history"
+                            >
+                                <div className="space-y-3">
+                                    <div>
+                                        <p className="text-sm font-semibold text-gray-900">
+                                            Order #{log.entity_id.slice(0, 8)}
+                                        </p>
+                                        <p className="text-xs text-gray-500">Grouped history for this order</p>
+                                    </div>
+                                    {orderHistory.length > 0 ? (
+                                        <div className="space-y-3">
+                                            {orderHistory.map((historyEvent) => (
+                                                <div key={historyEvent.id} className="border-l-2 border-gray-200 pl-3">
+                                                    <p className="text-xs font-semibold text-gray-900">
+                                                        {actionLabels[historyEvent.action] || historyEvent.action}
+                                                    </p>
+                                                    <p className="text-[11px] text-gray-500">
+                                                        {format(new Date(historyEvent.created_at), "MMM d, yyyy 'at' HH:mm")}
+                                                    </p>
+                                                    {historyEvent.metadata?.nextStatus ? (
+                                                        <p className="mt-1 text-[11px] text-gray-600">
+                                                            {historyEvent.metadata.previousStatus
+                                                                ? `${historyEvent.metadata.previousStatus} -> ${historyEvent.metadata.nextStatus}`
+                                                                : historyEvent.metadata.nextStatus}
+                                                        </p>
+                                                    ) : null}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-xs text-gray-500">No grouped history available.</p>
+                                    )}
+                                </div>
+                            </HoverPanel>
+                        ) : null}
+                    </div>
+                );
+            },
         },
     ].filter((column) => column.className !== "hidden");
 

@@ -34,8 +34,8 @@ export default function CheckoutForm() {
         stripe.retrievePaymentIntent(clientSecret).then(({ paymentIntent }) => {
             switch (paymentIntent?.status) {
                 case "succeeded":
-                    clearCart();
                     router.push(`/checkout/success?payment_intent_client_secret=${clientSecret}`);
+                    setTimeout(() => clearCart(), 500); // Clear after navigation starts to prevent empty UI flash
                     break;
                 case "processing":
                     setMessage("Your payment is processing. We'll update you when payment is received.");
@@ -87,9 +87,9 @@ export default function CheckoutForm() {
             console.error("Stripe confirmPayment error:", error);
         } else if (paymentIntent?.status === "succeeded") {
             // Card payment resolved in-page — navigate to success
-            clearCart();
             const secret = paymentIntent.client_secret;
             router.push(`/checkout/success?payment_intent_client_secret=${secret}`);
+            setTimeout(() => clearCart(), 500); // Wait for transition before purging app-level context
         } else if (paymentIntent?.status === "processing") {
             setMessage("Your payment is being processed. We'll let you know once confirmed.");
         } else {
