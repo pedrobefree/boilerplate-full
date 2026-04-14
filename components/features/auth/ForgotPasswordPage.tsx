@@ -5,8 +5,8 @@ import { ArrowLeft, KeyRound } from "lucide-react";
 import { UntitledUiLogo } from "@/components/ui/logos";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
+import { requestPasswordResetEmail } from "@/app/actions/auth";
 
 export const ForgotPasswordPage = () => {
     const [isSubmitted, setIsSubmitted] = useState(false);
@@ -18,14 +18,14 @@ export const ForgotPasswordPage = () => {
         e.preventDefault();
         setIsLoading(true);
 
-        const supabase = createClient();
-
         try {
-            const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                redirectTo: `${window.location.origin}/auth/update-password`,
+            const result = await requestPasswordResetEmail({
+                email,
             });
 
-            if (error) throw error;
+            if (!result.success) {
+                throw new Error("Failed to send reset email.");
+            }
 
             setIsSubmitted(true);
             addToast({

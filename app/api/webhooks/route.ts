@@ -44,7 +44,7 @@ export async function POST(req: Request) {
                     break;
                 case 'customer.subscription.created':
                 case 'customer.subscription.updated':
-                case 'customer.subscription.deleted':
+                case 'customer.subscription.deleted': {
                     const subscription = event.data.object as Stripe.Subscription;
                     await manageSubscriptionStatusChange(
                         subscription.id,
@@ -52,7 +52,8 @@ export async function POST(req: Request) {
                         event.type === 'customer.subscription.created'
                     );
                     break;
-                case 'checkout.session.completed':
+                }
+                case 'checkout.session.completed': {
                     const checkoutSession = event.data.object as Stripe.Checkout.Session;
                     if (checkoutSession.mode === 'subscription') {
                         const subscriptionId = checkoutSession.subscription;
@@ -73,18 +74,20 @@ export async function POST(req: Request) {
                         );
                     }
                     break;
-                case 'payment_intent.succeeded':
+                }
+                case 'payment_intent.succeeded': {
                     const piSucceeded = event.data.object as Stripe.PaymentIntent;
                     await updateOrderStatus(
                         piSucceeded.id,
-                        'completed',
+                        'Payment Approved',
                         (piSucceeded as any).shipping || (piSucceeded as any).billing_details
                     );
                     break;
+                }
                 case 'payment_intent.payment_failed':
                     await updateOrderStatus(
                         (event.data.object as Stripe.PaymentIntent).id,
-                        'cancelled'
+                        'Canceled'
                     );
                     break;
                 default:

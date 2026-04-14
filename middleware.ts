@@ -34,7 +34,6 @@ export async function middleware(request: NextRequest) {
         "/dashboard",
         "/admin",
         "/settings",
-        "/projects",
         "/users",
         "/notifications",
         "/support",

@@ -12,7 +12,7 @@ type AccessContext = {
     hasCustomerAccess: boolean;
 };
 
-const DASHBOARD_PATH_PREFIXES = ["/dashboard", "/admin", "/settings", "/projects", "/users", "/notifications", "/support"];
+const DASHBOARD_PATH_PREFIXES = ["/dashboard", "/admin", "/settings", "/users", "/notifications", "/support"];
 const CUSTOMER_PATH_PREFIXES = ["/orders", "/profile"];
 
 function isSafeInternalPath(path?: string | null) {

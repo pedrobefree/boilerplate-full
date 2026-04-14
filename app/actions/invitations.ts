@@ -5,6 +5,7 @@ import { withErrorHandling } from "@/lib/supabase/errors";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { recordCurrentUserActivity } from "@/lib/activity-log";
+import { buildAppUrl, sendInvitationEmail as sendInvitationTransactionalEmail } from "@/lib/email";
 
 const ACTIVE_ORG_COOKIE = "current_org_id";
 
@@ -250,7 +251,13 @@ export async function resendInvitation(invitationId: string) {
         if (updateError) throw updateError;
 
         // Send email
-        await sendInvitationEmail(invitation.email, newToken, org?.name || "the team");
+        await sendInvitationEmail(
+            invitation.email,
+            newToken,
+            org?.name || "the team",
+            undefined,
+            expirationDays
+        );
 
         await recordCurrentUserActivity({
             organizationId: orgId,
@@ -272,38 +279,20 @@ export async function resendInvitation(invitationId: string) {
 /**
  * Send invitation email via Supabase
  */
-export async function sendInvitationEmail(email: string, token: string, orgName: string) {
-    // For local development, we'll use Supabase's built-in Inbucket
-    // In production, you would use Resend or another email provider
+export async function sendInvitationEmail(
+    email: string,
+    token: string,
+    orgName: string,
+    inviterName?: string | null,
+    expirationDays = 7
+) {
+    const inviteUrl = buildAppUrl(`/signup?invite=${token}`);
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    const inviteUrl = `${appUrl}/signup?invite=${token}`;
-
-    // For now, we'll just log the email - in production, integrate with email service
-    console.log(`
-    ========================================
-    📧 INVITATION EMAIL
-    ========================================
-    To: ${email}
-    Subject: You've been invited to join ${orgName}
-    
-    You've been invited to join ${orgName} on Befree.
-    
-    Click the link below to accept the invitation:
-    ${inviteUrl}
-    
-    This invitation expires in 7 days.
-    ========================================
-    `);
-
-    // TODO: In production, use Resend or Supabase Edge Function
-    // Example with Resend:
-    // await resend.emails.send({
-    //     from: "noreply@befree.app",
-    //     to: email,
-    //     subject: `You've been invited to join ${orgName}`,
-    //     html: `<p>Click <a href="${inviteUrl}">here</a> to accept</p>`
-    // });
-
-    return true;
+    return sendInvitationTransactionalEmail({
+        to: email,
+        invitationUrl: inviteUrl,
+        organizationName: orgName,
+        inviterName,
+        expiresInDays: expirationDays,
+    });
 }

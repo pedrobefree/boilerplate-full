@@ -215,7 +215,13 @@ export async function inviteMember(email: string, role: "owner" | "admin" | "mem
         if (inviteError) throw inviteError;
 
         // Send invitation email
-        await sendInvitationEmail(email, invitation.token, org?.name || "the team");
+        await sendInvitationEmail(
+            email,
+            invitation.token,
+            org?.name || "the team",
+            currentUser.user_metadata?.full_name || null,
+            expirationDays
+        );
 
         await recordCurrentUserActivity({
             organizationId: orgId,

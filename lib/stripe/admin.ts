@@ -3,6 +3,13 @@ import { stripe } from "@/lib/stripe/server";
 import { createClient } from "@supabase/supabase-js";
 import Stripe from "stripe";
 import { recordActivity } from "@/lib/activity-log";
+import {
+    buildAppUrl,
+    sendAdminPaymentConfirmedEmail,
+    sendOrderCancelledEmail,
+    sendOrderConfirmationEmail,
+} from "@/lib/email";
+import { triggerPasswordEmail } from "@/lib/auth-email";
 
 // NOTE: We use a direct service role client here for webhook handling to bypass specific RLS that might block system updates
 // or to ensure we have full access to write products/prices.
@@ -10,6 +17,10 @@ const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+function getOrderNumber(orderId: string) {
+    return orderId.slice(0, 8).toUpperCase();
+}
 
 /**
  * Syncs a Stripe Product to Supabase.
@@ -58,7 +69,7 @@ export const upsertPriceRecord = async (price: Stripe.Price) => {
 export const manageSubscriptionStatusChange = async (
     subscriptionId: string,
     customerId: string,
-    createAction = false
+    _createAction = false
 ) => {
     // 1. Retrieve the latest subscription data from Stripe
     const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
@@ -161,9 +172,15 @@ export const updateOrderStatus = async (
         return;
     }
 
+    if (order.status === status) {
+        console.log(`[DATA-FLOW] Skipping duplicate order update for ${order.id}. Status already ${status}.`);
+        return;
+    }
+
     let userId = order.user_id;
     let orgId = order.organization_id;
     let magicLink = null;
+    let createdNewUser = false;
 
     // Multi-source email extraction
     const email = billingDetails?.email || 
@@ -202,6 +219,7 @@ export const updateOrderStatus = async (
                 console.error("[DATA-FLOW] Error creating user:", createError);
             } else if (newUser.user) {
                 userId = newUser.user.id;
+                createdNewUser = true;
                 console.log(`[DATA-FLOW] New user created: ${userId}`);
 
                 // Generate Magic Link
@@ -374,6 +392,109 @@ export const updateOrderStatus = async (
             paymentIntentId,
         },
     });
+
+    const orderNumber = getOrderNumber(order.id);
+
+    try {
+        let customerEmail = email as string | undefined;
+        let customerName = name as string | undefined;
+
+        if (userId) {
+            const { data: profile } = await supabaseAdmin
+                .from("profiles")
+                .select("email, full_name")
+                .eq("id", userId)
+                .maybeSingle();
+
+            customerEmail = customerEmail || profile?.email || undefined;
+            customerName = customerName || profile?.full_name || undefined;
+        }
+
+        if (status === "Payment Approved") {
+            const { data: items } = await supabaseAdmin
+                .from("order_items")
+                .select("quantity, unit_amount, product:products(name)")
+                .eq("order_id", order.id);
+
+            if (customerEmail) {
+                await sendOrderConfirmationEmail({
+                    to: customerEmail,
+                    customerName,
+                    orderNumber,
+                    items: (items || []).map((item: any) => ({
+                        name: item.product?.name || "Produto",
+                        quantity: item.quantity,
+                        unitAmount: item.unit_amount || 0,
+                    })),
+                    totalAmount: order.total_amount,
+                    currency: order.currency,
+                    orderDate: order.created_at,
+                    orderUrl: buildAppUrl(`/orders/${order.id}`),
+                });
+            }
+
+            if (createdNewUser && customerEmail) {
+                await triggerPasswordEmail({
+                    email: customerEmail,
+                    mode: "welcome",
+                    recipientName: customerName,
+                    orderNumber,
+                    allowWithoutProfile: true,
+                });
+            }
+
+            if (orgId) {
+                const { data: organization } = await supabaseAdmin
+                    .from("organizations")
+                    .select("name")
+                    .eq("id", orgId)
+                    .maybeSingle();
+
+                const { data: adminMembers } = await supabaseAdmin
+                    .from("organization_members")
+                    .select("user_id, role")
+                    .eq("organization_id", orgId)
+                    .in("role", ["owner", "admin"]);
+
+                const adminIds = Array.from(new Set((adminMembers || []).map((member) => member.user_id)));
+                if (adminIds.length > 0) {
+                    const { data: adminProfiles } = await supabaseAdmin
+                        .from("profiles")
+                        .select("id, email")
+                        .in("id", adminIds);
+
+                    const adminEmails = Array.from(
+                        new Set((adminProfiles || []).map((profile) => profile.email).filter(Boolean))
+                    ) as string[];
+
+                    if (adminEmails.length > 0) {
+                        await sendAdminPaymentConfirmedEmail({
+                            to: adminEmails,
+                            organizationName: organization?.name || "Organização",
+                            orderNumber,
+                            customerName,
+                            totalAmount: order.total_amount,
+                            currency: order.currency,
+                            confirmedAt: new Date().toISOString(),
+                            orderUrl: buildAppUrl(`/admin/orders/${order.id}`),
+                        });
+                    }
+                }
+            }
+        }
+
+        if (status === "Canceled" && customerEmail) {
+            await sendOrderCancelledEmail({
+                to: customerEmail,
+                customerName,
+                orderNumber,
+                orderUrl: buildAppUrl(`/orders/${order.id}`),
+                refundWindow: "5 a 10 dias úteis",
+            });
+        }
+    } catch (emailError) {
+        console.error("[DATA-FLOW] Transactional email dispatch failed", emailError);
+    }
 
     console.log(`[DATA-FLOW] Order ${order.id} update complete. Status: ${status}, User: ${userId}, Org: ${orgId}`);
 };

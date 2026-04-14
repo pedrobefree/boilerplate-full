@@ -166,3 +166,26 @@ export async function getMyOrganizations() {
         return data;
     });
 }
+
+export async function getOrganizationMembers() {
+    return withErrorHandling(async () => {
+        const supabase = await createClient();
+        const orgId = await getActiveOrg();
+
+        const { data, error } = await supabase
+            .from("organization_members")
+            .select(`
+                user_id,
+                role,
+                profile:profiles!user_id(id, full_name, avatar_url, email)
+            `)
+            .eq("organization_id", orgId);
+
+        if (error) throw error;
+        return data.map(m => ({
+            id: m.user_id,
+            role: m.role,
+            ...m.profile
+        }));
+    }, { action: "getOrganizationMembers" });
+}

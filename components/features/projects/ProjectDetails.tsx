@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Progress } from "@/components/ui/Progress";
 import { AvatarGroupRoot as AvatarGroup } from "@/components/ui/AvatarGroup";
+import { Avatar } from "@/components/ui/Avatar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Tabs } from "@/components/ui/Tabs";
 import { AreaChart } from "../charts/AreaChart";
@@ -16,6 +17,7 @@ import { ProjectFiles } from "./ProjectFiles";
 import { EditProjectModal } from "./EditProjectModal";
 import { ProjectSharePopover } from "./ProjectSharePopover";
 import { useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 
 interface ProjectDetailsProps {
     project: {
@@ -26,23 +28,37 @@ interface ProjectDetailsProps {
         progress: number;
         team: string[];
         category: string;
+        taskStats?: {
+            total: number;
+            done: number;
+            progress: number;
+        };
     };
-    onBack: () => void;
+    onBack?: () => void;
 }
 
 export const ProjectDetails = ({ project: initialProject, onBack }: ProjectDetailsProps) => {
+    const router = useRouter();
     const [selectedTab, setSelectedTab] = useState("overview");
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isSharePopoverOpen, setIsSharePopoverOpen] = useState(false);
     const [project, setProject] = useState(initialProject);
     const shareButtonRef = useRef<HTMLDivElement>(null);
 
+    const handleBack = () => {
+        if (onBack) {
+            onBack();
+        } else {
+            router.push("/dashboard/projects");
+        }
+    };
+
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
             {/* Header */}
             <div className="flex flex-col gap-6">
                 <button
-                    onClick={onBack}
+                    onClick={handleBack}
                     className="flex items-center gap-2 text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors group w-fit"
                 >
                     <ArrowLeft className="size-4 group-hover:-translate-x-1 transition-transform" />
@@ -86,7 +102,6 @@ export const ProjectDetails = ({ project: initialProject, onBack }: ProjectDetai
                     <Tabs.Item id="overview">Overview</Tabs.Item>
                     <Tabs.Item id="tasks">Tasks</Tabs.Item>
                     <Tabs.Item id="team">Team members</Tabs.Item>
-                    <Tabs.Item id="files">Files & Docs</Tabs.Item>
                 </Tabs.List>
 
                 <div className="mt-8">
@@ -94,6 +109,8 @@ export const ProjectDetails = ({ project: initialProject, onBack }: ProjectDetai
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                             {/* Main Content */}
                             <div className="lg:col-span-2 space-y-8">
+                                { /* Hide Activity Graph per user request V1 */ }
+                                { /* 
                                 <Card>
                                     <CardHeader>
                                         <CardTitle className="text-lg">Project Activity</CardTitle>
@@ -116,19 +133,20 @@ export const ProjectDetails = ({ project: initialProject, onBack }: ProjectDetai
                                         </div>
                                     </CardContent>
                                 </Card>
+                                */ }
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                                     <StatCard
                                         title="Active Tasks"
-                                        value="12"
-                                        subValue="4 completed this week"
+                                        value={project.taskStats?.total || "0"}
+                                        subValue={`${project.taskStats?.done || 0} completed`}
                                         icon={CheckCircle2}
                                         iconClass="text-success-600 bg-success-50"
                                     />
                                     <StatCard
                                         title="Upcoming Deadlines"
-                                        value="3"
-                                        subValue="Next: Feb 12, 2026"
+                                        value="--"
+                                        subValue="No immediate deadlines"
                                         icon={Clock}
                                         iconClass="text-warning-600 bg-warning-50"
                                     />
@@ -149,9 +167,20 @@ export const ProjectDetails = ({ project: initialProject, onBack }: ProjectDetai
                                     </CardHeader>
                                     <CardContent>
                                         <div className="divide-y divide-gray-100">
-                                            <TaskRow title="Finalize UI Kit tokens" status="In Progress" priority="High" />
-                                            <TaskRow title="Review documentation with stakeholders" status="Todo" priority="Medium" />
-                                            <TaskRow title="Fix responsive alignment bugs" status="Todo" priority="Low" />
+                                            {project.upcomingTasks && project.upcomingTasks.length > 0 ? (
+                                                project.upcomingTasks.map((task: any) => (
+                                                    <TaskRow 
+                                                        key={task.id}
+                                                        title={task.title} 
+                                                        status={task.status.replace('_', ' ').charAt(0).toUpperCase() + task.status.slice(1)} 
+                                                        priority={task.priority?.charAt(0).toUpperCase() + task.priority?.slice(1) || "Medium"} 
+                                                    />
+                                                ))
+                                            ) : (
+                                                <div className="py-8 text-center text-gray-500 text-sm">
+                                                    No upcoming tasks for this project.
+                                                </div>
+                                            )}
                                         </div>
                                     </CardContent>
                                 </Card>
@@ -165,12 +194,14 @@ export const ProjectDetails = ({ project: initialProject, onBack }: ProjectDetai
                                     </CardHeader>
                                     <CardContent className="space-y-4">
                                         <div className="flex items-end justify-between">
-                                            <span className="text-3xl font-bold text-gray-900">{project.progress}%</span>
+                                            <span className="text-3xl font-bold text-gray-900">{project.taskStats?.progress || 0}%</span>
                                             <span className="text-sm text-gray-500">Target: 100%</span>
                                         </div>
-                                        <Progress value={project.progress} size="lg" />
+                                        <Progress value={project.taskStats?.progress || 0} size="lg" />
                                         <p className="text-xs text-gray-500 leading-relaxed">
-                                            On track to complete by end of Q1. Most major components have been finalized.
+                                            {project.taskStats?.progress === 100 
+                                                ? "Project fully completed based on tasks." 
+                                                : "Progress based on tasks completion status."}
                                         </p>
                                     </CardContent>
                                 </Card>
@@ -180,9 +211,25 @@ export const ProjectDetails = ({ project: initialProject, onBack }: ProjectDetai
                                         <CardTitle className="text-sm uppercase tracking-wider text-gray-500">Team</CardTitle>
                                     </CardHeader>
                                     <CardContent className="space-y-4">
-                                        <AvatarGroup limit={5}>
-                                            {project.team.map((src, i) => <AvatarGroup.Item key={i} src={src} />)}
-                                        </AvatarGroup>
+                                        <div className="space-y-3">
+                                            {project.members && project.members.slice(0, 3).map((m: any) => (
+                                                <div key={m.user_id} className="flex items-center gap-3">
+                                                    <Avatar src={m.profile?.avatar_url} alt={m.profile?.full_name} size="sm" />
+                                                    <div className="flex flex-col min-w-0">
+                                                        <span className="text-sm font-semibold text-gray-900 truncate">{m.profile?.full_name}</span>
+                                                        <span className="text-xs text-gray-500 truncate">{m.profile?.email}</span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {project.members && project.members.length > 3 && (
+                                                <p className="text-xs text-gray-500 pl-11">
+                                                    + {project.members.length - 3} more members
+                                                </p>
+                                            )}
+                                            {(!project.members || project.members.length === 0) && (
+                                                <p className="text-sm text-gray-500 italic">No members assigned</p>
+                                            )}
+                                        </div>
                                         <Button
                                             variant="secondary"
                                             size="sm"
@@ -194,16 +241,6 @@ export const ProjectDetails = ({ project: initialProject, onBack }: ProjectDetai
                                     </CardContent>
                                 </Card>
 
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle className="text-sm uppercase tracking-wider text-gray-500">Recent Assets</CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="space-y-3">
-                                        <AssetLink name="Project_Manifesto.pdf" size="2.4 MB" />
-                                        <AssetLink name="Design_Specs_v2.fig" size="14.8 MB" />
-                                        <Button variant="tertiary" size="sm" className="w-full">View all assets</Button>
-                                    </CardContent>
-                                </Card>
                             </div>
                         </div>
                     </Tabs.Panel>
@@ -213,12 +250,9 @@ export const ProjectDetails = ({ project: initialProject, onBack }: ProjectDetai
                     </Tabs.Panel>
 
                     <Tabs.Panel id="team">
-                        <ProjectTeam />
+                        <ProjectTeam projectId={project.id} members={project.members} />
                     </Tabs.Panel>
 
-                    <Tabs.Panel id="files">
-                        <ProjectFiles />
-                    </Tabs.Panel>
                 </div>
             </Tabs>
 

@@ -8,7 +8,7 @@ import { TextArea } from "@/components/ui/Textarea";
 import { useState, useEffect } from "react";
 import { cx } from "@/lib/utils";
 
-import { createTask } from "@/app/actions/tasks";
+import { createTask, getAssignableMembers } from "@/app/actions/tasks";
 import { useToast } from "@/components/ui/Toast";
 
 interface CreateTaskModalProps {
@@ -25,8 +25,18 @@ export const CreateTaskModal = ({ isOpen, onClose, projectId, initialStatus = "t
     const [status, setStatus] = useState(initialStatus);
     const [priority, setPriority] = useState<"low" | "medium" | "high">("medium");
     const [dueDate, setDueDate] = useState("");
+    const [assigneeId, setAssigneeId] = useState("");
+    const [members, setMembers] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const { addToast } = useToast();
+
+    useEffect(() => {
+        if (isOpen && projectId) {
+            getAssignableMembers(projectId).then(res => {
+                if (res.success) setMembers(res.data);
+            });
+        }
+    }, [isOpen, projectId]);
 
     // Reset status when modal opens/changes
     useEffect(() => {
@@ -44,7 +54,7 @@ export const CreateTaskModal = ({ isOpen, onClose, projectId, initialStatus = "t
             status,
             priority,
             dueDate: dueDate || undefined,
-            assigneeId: undefined // TODO: Handle assignee
+            assigneeId: assigneeId || undefined
         });
         setIsLoading(false);
 
@@ -157,7 +167,18 @@ export const CreateTaskModal = ({ isOpen, onClose, projectId, initialStatus = "t
                                     <label className="text-sm font-bold text-gray-700 flex items-center gap-2">
                                         <User className="size-4 text-gray-400" /> Assignee
                                     </label>
-                                    <Input placeholder="Search member..." className="h-10" />
+                                    <select
+                                        value={assigneeId}
+                                        onChange={(e) => setAssigneeId(e.target.value)}
+                                        className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                                    >
+                                        <option value="">Select a member...</option>
+                                        {members.map(member => (
+                                            <option key={member.id} value={member.id}>
+                                                {member.full_name}
+                                            </option>
+                                        ))}
+                                    </select>
                                 </div>
                             </div>
                         </div>

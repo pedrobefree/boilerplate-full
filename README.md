@@ -49,6 +49,8 @@ This boilerplate is designed to work with Supabase CLI for local development.
    Open `.env.local` and paste the keys provided by the Supabase CLI in the previous step.
 3. **Encryption Key**:
    Generate a random 32-character string for `ENCRYPTION_KEY` to secure sensitive data.
+4. **Transactional Email (Resend)**:
+   Add `RESEND_API_KEY`, `EMAIL_FROM`, and optionally `EMAIL_REPLY_TO` in `.env.local` to enable transactional emails.
 
 ### 5. Initialize Branding & Theme
 This boilerplate features an automated branding system. To generate the CSS palette based on your settings in `lib/constants.ts`:

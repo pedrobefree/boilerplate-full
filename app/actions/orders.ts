@@ -3,6 +3,7 @@
 import { createClient, createSystemClient } from "@/lib/supabase/server";
 import { stripe } from "@/lib/stripe/server";
 import { recordCurrentUserActivity } from "@/lib/activity-log";
+import { buildAppUrl, sendOrderCancelledEmail } from "@/lib/email";
 
 export interface OrderFilters {
     status?: string;
@@ -173,7 +174,7 @@ export async function updateOrderStatus(orderId: string, status: string) {
     // 1. Fetch current status for validation
     const { data: order, error: fetchError } = await supabase
         .from('orders')
-        .select('status, stripe_payment_intent_id, organization_id')
+        .select('status, stripe_payment_intent_id, organization_id, user_id, billing_details')
         .eq('id', orderId)
         .single();
 
@@ -238,6 +239,36 @@ export async function updateOrderStatus(orderId: string, status: string) {
         },
     });
 
+    if (status === "Canceled" && order.status !== "Canceled") {
+        try {
+            let recipientEmail = order.billing_details?.email as string | undefined;
+            let recipientName = order.billing_details?.name as string | undefined;
+
+            if (!recipientEmail && order.user_id) {
+                const { data: profile } = await supabase
+                    .from("profiles")
+                    .select("email, full_name")
+                    .eq("id", order.user_id)
+                    .maybeSingle();
+
+                recipientEmail = profile?.email || recipientEmail;
+                recipientName = profile?.full_name || recipientName;
+            }
+
+            if (recipientEmail) {
+                await sendOrderCancelledEmail({
+                    to: recipientEmail,
+                    customerName: recipientName,
+                    orderNumber: orderId.slice(0, 8).toUpperCase(),
+                    orderUrl: buildAppUrl(`/orders/${orderId}`),
+                    refundWindow: "5 a 10 dias úteis",
+                });
+            }
+        } catch (emailError) {
+            console.error("[orders] Failed to send cancellation email", emailError);
+        }
+    }
+
     return { success: true };
 }
 
@@ -245,7 +276,7 @@ export async function getOrderByPaymentIntent(paymentIntentId: string) {
     const supabase = await createClient();
     
     // We use the normal client first to see if the user is logged in and owns it
-    const { data: order, error } = await supabase
+    const { data: order } = await supabase
         .from('orders')
         .select('*, items:order_items(id, quantity, unit_amount, product:products(name))')
         .eq('stripe_payment_intent_id', paymentIntentId)

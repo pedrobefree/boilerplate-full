@@ -7,12 +7,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Progress } from "@/components/ui/Progress";
 import { FilterSheet } from "@/components/ui/FilterSheet";
-import { ProjectDetails } from "./ProjectDetails";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 interface Project {
     id: string;
     name: string;
+    slug: string;
     description: string;
     status: "active" | "on-hold" | "completed";
     progress: number;
@@ -27,27 +28,27 @@ interface ProjectsPageProps {
 }
 
 export const ProjectsPage = ({ initialProjects = [] }: ProjectsPageProps) => {
+    const router = useRouter();
     const [searchQuery, setSearchQuery] = useState("");
     const [statusFilter, setStatusFilter] = useState<string>("all");
-    const [selectedProject, setSelectedProject] = useState<Project | null>(null);
 
     // Map backend data to UI model
     const projects: Project[] = initialProjects.map(p => ({
         id: p.id,
         name: p.name,
+        slug: p.slug || p.id,
         description: p.description || "",
         status: p.status === "inactive" || p.status === "canceled" ? "on-hold" : (p.status || "active"),
-        progress: 0, // TODO: Calculate from tasks
+        progress: p.taskStats?.progress || 0,
         team: p.members ? p.members.map((m: any) => m.profile?.avatar_url || "/api/placeholder/32/32") : [],
         deadline: p.deadline ? new Date(p.deadline).toLocaleDateString() : "No deadline",
         priority: "medium", // Default as per schema limitations
         category: "General"
     }));
 
-    // If a project is selected, show the detail view
-    if (selectedProject) {
-        return <ProjectDetails project={selectedProject} onBack={() => setSelectedProject(null)} />;
-    }
+    const handleProjectClick = (project: Project) => {
+        router.push(`/dashboard/projects/${project.slug}`);
+    };
 
     const filteredProjects = projects.filter(project => {
         const matchesSearch = project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -211,7 +212,7 @@ export const ProjectsPage = ({ initialProjects = [] }: ProjectsPageProps) => {
                     <Card
                         key={project.id}
                         className="hover:shadow-lg transition-shadow cursor-pointer"
-                        onClick={() => setSelectedProject(project)}
+                        onClick={() => handleProjectClick(project)}
                     >
                         <CardHeader>
                             <div className="flex items-start justify-between">

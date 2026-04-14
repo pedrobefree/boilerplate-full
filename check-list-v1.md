@@ -8,10 +8,10 @@
 2. Busca e Filtro Produtos  → independente, sem dependências  
 3. Activity Log             → alimenta o Dashboard
 4. Gestão de Projetos       → alimenta o Dashboard
-5. Email Transacional       → consome dados de Projetos, Pedidos, Convites
+5. Email Transacional       → consome dados de Autenticação, Projetos, Pedidos, Convites
 6. Dashboard com Dados Reais → consome tudo acima
 ```
-
+****
 ---
 
 ## Módulo 0 — Dev Experience: Stripe Webhook Local
@@ -169,56 +169,55 @@ Critérios de aceitação:
 ## Módulo 4 — Gestão de Projetos (v1 completa)
 
 ### Checklist
-- [ ] Completar página de detalhes do projeto: header com nome, descrição, status e datas
-- [ ] Implementar listagem de tarefas dentro do projeto com status visual (kanban simples ou lista agrupada por status)
-- [ ] Implementar criação de tarefa via modal/drawer: nome, descrição, responsável, prioridade, prazo
-- [ ] Implementar edição de tarefa inline ou via modal
-- [ ] Implementar exclusão de tarefa com confirmação
-- [ ] Implementar alteração de status da tarefa: `todo`, `in_progress`, `done`
-- [ ] Implementar adição e listagem de notas em uma tarefa
-- [ ] Garantir que projetos e tarefas sejam escopados à organização ativa
-- [ ] Implementar página de listagem de projetos com status, contagem de tarefas e progresso
-- [ ] Garantir RLS: membros veem apenas projetos/tarefas da sua organização
+- [x] Implementar página de listagem de projetos com status, contagem de tarefas e progresso
+- [x] Criação de projeto básica implementada
+- [x] Implementar página base de detalhes do projeto
+- [x] Implementação básica do módulo de tarefas (criação, edição, exclusão, status)
+- [x] Implementar adição e listagem de notas em uma tarefa
+- [x] Garantir que projetos e tarefas sejam escopados à organização ativa
+- [x] Garantir RLS: membros veem apenas projetos/tarefas da sua organização
+- [ ] Adicionar suporte a `slug` (parâmetro de URL amigável) nos projetos para identificação e compartilhamento de URL.
+- [ ] Implementar associação de um responsável (owner) e membros ao projeto respectivo.
+- [ ] Conectar membros de tarefas automaticamente como membros do projeto se a visibilidade for "toda a organização" (habilitar a aba de membros existente).
+- [ ] Alimentar os gráficos e indicadores na página de detalhes de projetos com dados reais do Supabase (substituir hard-coded).
+- [ ] Substituir dados hard-coded na listagem de tarefas da tela principal do projeto para dados reais recuperados do banco de dados.
+- [ ] Corrigir e garantir que a associação de um "Responsável" (assignee) funcione ao criar/editar uma tarefa.
+- [ ] Ocultar o módulo/aba de Arquivos/Anexos das tarefas para a release V1.
+- [ ] Limpar a UI do módulo de projetos e tarefas, ocultando componentes, abas ou botões não utilizados na V1.
 
 ### Histórias de Usuário
 
-**US4.1** — Eu como membro da organização, quero ver a listagem de projetos com informações de progresso para ter uma visão geral do trabalho.
-
+**US4.1** — Eu como membro da organização, quero ver a listagem de projetos com informações de progresso para ter uma visão geral do trabalho. *(Concluída)*
 Critérios de aceitação:
-- Listagem exibe: nome do projeto, descrição curta, status, data de criação e contagem de tarefas (total e concluídas)
-- Exibe indicador visual de progresso (ex: `3/8 tarefas concluídas`)
-- Projetos são escopados à organização ativa
-- Estado vazio exibe `EmptyState` com call to action para criar o primeiro projeto
+- Listagem exibe os projetos associados à organização.
+- Reflete status, progresso e quantidade.
 
-**US4.2** — Eu como membro da organização, quero criar um novo projeto para organizar um conjunto de tarefas.
-
+**US4.2** — Eu como membro da organização, quero criar e configurar um novo projeto, associando equipe e acessos. *(Em andamento)*
 Critérios de aceitação:
-- Formulário com campos: nome (obrigatório), descrição, status inicial
-- Projeto criado é associado à organização ativa
-- Após criação, redireciona para a página de detalhes do projeto
+- Possível criar projeto com uma URL amigável (`slug`).
+- Possível atribuir um responsável e outros membros ao projeto.
+- Usuários associados a tarefas são adicionados aos membros do projeto automaticamente, se a visibilidade for para a organização.
 
-**US4.3** — Eu como membro da organização, quero ver os detalhes de um projeto e gerenciar suas tarefas.
-
+**US4.3** — Eu como membro da organização, quero ver os detalhes de um projeto através de URLs compartilháveis e acompanhar as suas métricas e tarefas com base na realidade. *(Em andamento)*
 Critérios de aceitação:
-- Página de detalhe exibe: nome, descrição, status, datas e lista de tarefas
-- Tarefas são agrupadas ou sinalizadas por status: `A fazer`, `Em andamento`, `Concluída`
-- Possível criar nova tarefa diretamente na página de detalhes
-- Possível alterar o status de uma tarefa diretamente na listagem
+- Acessível usando o `slug` no lugar do UUID interno.
+- A página do projeto exibe dados reais na lista de tarefas.
+- Gráficos e indicadores de acompanhamento consultam andamento real.
 
-**US4.4** — Eu como membro da organização, quero criar e editar tarefas dentro de um projeto.
-
+**US4.4** — Eu como membro da organização, quero criar e editar tarefas dentro de um projeto e atribuí-las corretamente a responsáveis. *(Em andamento)*
 Critérios de aceitação:
-- Formulário com campos: título (obrigatório), descrição, responsável (membro da org), prioridade (`low`, `medium`, `high`), prazo
-- Edição disponível via modal ou inline
-- Exclusão de tarefa exige confirmação
+- Edição funciona corretamente.
+- Associação com responsável (assignee) funciona no momento de criação/edição.
+- Usuários listados na criação/edição de tarefas são os membros da organização, caso o projeto seja visível para toda organização ou somente os membros pertencentes ao projeto, caso sua visibilidade seja privada.
 
-**US4.5** — Eu como membro da organização, quero adicionar notas a uma tarefa para registrar contexto, bloqueios ou decisões.
-
+**US4.5** — Eu como membro da organização, quero adicionar notas a uma tarefa para registrar contexto, bloqueios ou decisões. *(Concluída)*
 Critérios de aceitação:
-- Seção de notas visível na tarefa expandida ou na página de detalhes da tarefa
-- Notas exibem: conteúdo, autor e data de criação
-- Notas são ordenadas do mais recente para o mais antigo
-- Notas não podem ser editadas após salvas (apenas excluídas pelo autor)
+- Notas podem ser inseridas, lidas e excluídas por seus autores.
+
+**US4.6** — Eu como membro da organização, quero interagir com uma interface limpa, focada e sem ruídos (como seções incompletas). *(Nova)*
+Critérios de aceitação:
+- Aba de Arquivos/Anexos em Tarefas é ocultada.
+- Elementos gráficos, botões ou sub-menus sem funcionalidade imediata removidos ou ocultados.
 
 ---
 
@@ -233,10 +232,20 @@ Critérios de aceitação:
   - [ ] Convite para organização
   - [ ] Confirmação de pedido
   - [ ] Pedido cancelado / estorno iniciado
+  - [ ] Solicitação de resgate de senha
+  - [ ] Projeto atribuído ao usuário
+  - [ ] Tarefa atribuída ao usuário
+  - [ ] Confirmação de pagamento para administrador da organização
 - [ ] Disparar email de convite ao criar/reenviar convite (`invitations.ts`)
 - [ ] Disparar email de confirmação ao criar pedido (webhook `payment_intent.succeeded`)
+- [ ] Disparar email ao administrador da organização quando um pedido tiver pagamento confirmado (`payment_intent.succeeded`)
 - [ ] Disparar email de cancelamento ao cancelar pedido (`orders.ts`)
+- [ ] Disparar email ao solicitar resgate de senha (`forgot-password` / fluxo de recuperação)
+- [ ] Disparar email ao atribuir um projeto a um usuário
+- [ ] Disparar email ao atribuir uma tarefa a um usuário
 - [ ] Garantir que falhas no envio de email não quebrem o fluxo principal (try/catch isolado)
+- [ ] Garantir idempotência para evitar emails duplicados em eventos de webhook e reatribuição sem mudança real
+- [ ] Garantir que o destinatário e o contexto do email respeitam a organização ativa e as permissões do usuário
 - [ ] Configurar domínio de envio no provedor (DNS: SPF, DKIM)
 
 > **Recomendação de provedor:** Resend — SDK TypeScript nativo, excelente DX, suporte a React Email para templates, plano gratuito de 3.000 emails/mês. Ideal para boilerplate educacional.
@@ -264,6 +273,43 @@ Critérios de aceitação:
 - Email enviado ao cancelar um pedido (pelo cliente ou pelo admin)
 - Email informa: número do pedido, motivo (quando informado), prazo estimado para estorno no cartão
 - Email enviado para o endereço do cliente
+
+**US5.4** — Eu como usuário, quando solicito resgate de senha, quero receber um email com instruções seguras para redefinir minha senha.
+
+Critérios de aceitação:
+- Email enviado ao iniciar o fluxo de recuperação de senha
+- Email contém link/token de redefinição com validade limitada
+- Email informa de forma clara que a solicitação pode ser ignorada caso não tenha sido feita pelo usuário
+- O fluxo não expõe se o email informado existe ou não na base
+
+**US5.5** — Eu como membro da organização, quando um projeto for atribuído ao meu usuário, quero receber um email para saber que passei a ser responsável ou participante daquele projeto.
+
+Critérios de aceitação:
+- Email enviado quando houver nova atribuição de projeto ao usuário
+- Email contém: nome do projeto, organização, papel do usuário no projeto e link direto para a página do projeto
+- O email não deve ser reenviado quando o registro for salvo sem mudança de atribuição
+
+**US5.6** — Eu como membro da organização, quando uma tarefa for atribuída ao meu usuário, quero receber um email para agir rapidamente sobre o trabalho pendente.
+
+Critérios de aceitação:
+- Email enviado quando uma tarefa recebe um novo responsável
+- Email contém: título da tarefa, projeto relacionado, status atual, prazo (quando houver) e link direto para a tarefa
+- O email não deve ser reenviado quando a edição não alterar o responsável
+
+**US5.7** — Eu como administrador da organização, quero receber um email sempre que um pedido tiver o pagamento confirmado para acompanhar o faturamento e a operação.
+
+Critérios de aceitação:
+- Email enviado ao administrador da organização após confirmação de pagamento (`payment_intent.succeeded`)
+- Se houver mais de um administrador elegível, a regra de destinatário deve ser definida explicitamente na implementação (ex: owner da organização ou todos os admins)
+- Email contém: número do pedido, cliente, valor total, data/hora da confirmação e link para detalhes do pedido no admin
+- O webhook deve evitar disparos duplicados para o mesmo evento de confirmação
+
+### Plano de Execução
+
+1. Consolidar a infraestrutura do módulo: escolher o provedor, configurar variáveis de ambiente, criar `lib/email.ts` e o template base reutilizável.
+2. Implementar os fluxos já existentes e mais críticos de negócio: convite para organização, confirmação de pedido, cancelamento de pedido e notificação ao administrador por pagamento confirmado.
+3. Integrar os eventos de autenticação e colaboração: recuperação de senha, atribuição de projeto e atribuição de tarefa, com gatilhos somente quando houver mudança real de estado.
+4. Fechar robustez operacional: idempotência para webhooks, `try/catch` isolado, validação de destinatários por organização, observabilidade/logs e testes dos templates e disparos.
 
 ---
 
@@ -334,6 +380,6 @@ Módulo 1 (Erros)      ──── sem dependências
 Módulo 2 (Produtos)   ──── sem dependências
 Módulo 3 (Log)        ──── sem dependências na implementação; alimenta Módulo 6
 Módulo 4 (Projetos)   ──── sem dependências na implementação; alimenta Módulos 5 e 6
-Módulo 5 (Emails)     ──── consome Módulos 3 e 4 (eventos de projetos, pedidos)
+Módulo 5 (Emails)     ──── consome Autenticação, Módulos 3 e 4 (eventos de projetos, tarefas, pedidos)
 Módulo 6 (Dashboard)  ──── consome Módulos 3 e 4 obrigatoriamente
 ```
