@@ -1,0 +1,13 @@
+.git
+.next
+node_modules
+node_modules_old
+dist
+dist-ssr
+*.log
+*.local
+.env
+.env.*
+!.env.example
+tsconfig.tsbuildinfo
+*.tsbuildinfo

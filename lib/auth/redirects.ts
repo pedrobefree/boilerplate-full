@@ -15,7 +15,7 @@ type AccessContext = {
 const DASHBOARD_PATH_PREFIXES = ["/dashboard", "/admin", "/settings", "/users", "/notifications", "/support"];
 const CUSTOMER_PATH_PREFIXES = ["/orders", "/profile"];
 
-function isSafeInternalPath(path?: string | null) {
+function isSafeInternalPath(path?: string | null): path is string {
     return !!path && path.startsWith("/") && !path.startsWith("//");
 }
 
@@ -27,7 +27,9 @@ function isCustomerPath(path: string) {
     return CUSTOMER_PATH_PREFIXES.some(prefix => path === prefix || path.startsWith(`${prefix}/`));
 }
 
-export async function getUserAccessContext(supabase: SupabaseLikeClient, userId: string): Promise<AccessContext> {
+export async function getUserAccessContext(supabaseClient: unknown, userId: string): Promise<AccessContext> {
+    const supabase = supabaseClient as SupabaseLikeClient;
+
     const [{ data: profile }, { data: memberships }] = await Promise.all([
         supabase
             .from("profiles")
@@ -40,7 +42,7 @@ export async function getUserAccessContext(supabase: SupabaseLikeClient, userId:
             .eq("user_id", userId),
     ]);
 
-    const roles = memberships?.map((membership: { role: string }) => membership.role) ?? [];
+    const roles: string[] = memberships?.map((membership: { role: string }) => membership.role) ?? [];
     const isSuperAdmin = profile?.role === "super_admin";
     const hasDashboardAccess = isSuperAdmin || roles.some(role => role === "owner" || role === "admin" || role === "member");
     const hasCustomerAccess = roles.includes("customer");
@@ -52,7 +54,7 @@ export async function getUserAccessContext(supabase: SupabaseLikeClient, userId:
     };
 }
 
-export function resolveAuthorizedPath(access: AccessContext, preferredPath?: string | null) {
+export function resolveAuthorizedPath(access: AccessContext, preferredPath?: string | null): string {
     if (isSafeInternalPath(preferredPath)) {
         if (isDashboardPath(preferredPath)) {
             return access.hasDashboardAccess ? preferredPath : "/orders";
