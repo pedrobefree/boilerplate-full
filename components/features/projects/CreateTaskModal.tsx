@@ -16,7 +16,7 @@ interface CreateTaskModalProps {
     onClose: () => void;
     projectId: string;
     initialStatus?: "todo" | "in-progress" | "done";
-    onTaskCreated?: () => void;
+    onTaskCreated?: () => void | Promise<void>;
 }
 
 export const CreateTaskModal = ({ isOpen, onClose, projectId, initialStatus = "todo", onTaskCreated }: CreateTaskModalProps) => {
@@ -60,11 +60,13 @@ export const CreateTaskModal = ({ isOpen, onClose, projectId, initialStatus = "t
 
         if (res.success) {
             addToast({ title: "Success", description: "Task created successfully", type: "success" });
-            if (onTaskCreated) onTaskCreated();
+            if (onTaskCreated) await onTaskCreated();
             // Reset form
             setTitle("");
             setDescription("");
             setDueDate("");
+            setAssigneeId("");
+            setPriority("medium");
             onClose();
         } else {
             addToast({ title: "Error", description: res.error || "Failed to create task", type: "error" });

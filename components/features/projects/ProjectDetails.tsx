@@ -1,23 +1,34 @@
 "use client";
 
-import { ArrowLeft, Clock, Settings, Paperclip, CheckCircle2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, Clock, Settings, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Progress } from "@/components/ui/Progress";
-import { AvatarGroupRoot as AvatarGroup } from "@/components/ui/AvatarGroup";
 import { Avatar } from "@/components/ui/Avatar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Tabs } from "@/components/ui/Tabs";
-import { AreaChart } from "../charts/AreaChart";
-
-
 import { ProjectTasks } from "./ProjectTasks";
 import { ProjectTeam } from "./ProjectTeam";
-import { ProjectFiles } from "./ProjectFiles";
 import { EditProjectModal } from "./EditProjectModal";
 import { ProjectSharePopover } from "./ProjectSharePopover";
-import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+
+function formatTaskDate(dateValue?: string | null) {
+    if (!dateValue) {
+        return "No deadline";
+    }
+
+    const match = dateValue.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    const date = match
+        ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12, 0, 0, 0)
+        : new Date(dateValue);
+    if (Number.isNaN(date.getTime())) {
+        return "No deadline";
+    }
+
+    return date.toLocaleDateString();
+}
 
 interface ProjectDetailsProps {
     project: {
@@ -33,6 +44,18 @@ interface ProjectDetailsProps {
             done: number;
             progress: number;
         };
+        upcomingDeadlines?: {
+            count: number;
+            nearestDueDate: string | null;
+        };
+        upcomingTasks?: Array<{
+            id: string;
+            title: string;
+            status: string;
+            priority?: string | null;
+            due_date?: string | null;
+        }>;
+        members?: any[];
     };
     onBack?: () => void;
 }
@@ -40,10 +63,24 @@ interface ProjectDetailsProps {
 export const ProjectDetails = ({ project: initialProject, onBack }: ProjectDetailsProps) => {
     const router = useRouter();
     const [selectedTab, setSelectedTab] = useState("overview");
+    const [selectedUpcomingTaskId, setSelectedUpcomingTaskId] = useState<string | null>(null);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isSharePopoverOpen, setIsSharePopoverOpen] = useState(false);
     const [project, setProject] = useState(initialProject);
     const shareButtonRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        setProject(initialProject);
+    }, [initialProject]);
+
+    useEffect(() => {
+        if (selectedTab !== "tasks") {
+            return;
+        }
+
+        const timer = window.setTimeout(() => setSelectedUpcomingTaskId(null), 0);
+        return () => window.clearTimeout(timer);
+    }, [selectedTab, selectedUpcomingTaskId]);
 
     const handleBack = () => {
         if (onBack) {
@@ -110,30 +147,6 @@ export const ProjectDetails = ({ project: initialProject, onBack }: ProjectDetai
                             {/* Main Content */}
                             <div className="lg:col-span-2 space-y-8">
                                 { /* Hide Activity Graph per user request V1 */ }
-                                { /* 
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle className="text-lg">Project Activity</CardTitle>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <div className="h-[300px] pt-4">
-                                            <AreaChart
-                                                data={[
-                                                    { date: "Jan 1", progress: 20 },
-                                                    { date: "Jan 5", progress: 35 },
-                                                    { date: "Jan 10", progress: 30 },
-                                                    { date: "Jan 15", progress: 55 },
-                                                    { date: "Jan 20", progress: 65 },
-                                                    { date: "Jan 25", progress: 75 },
-                                                ]}
-                                                index="date"
-                                                categories={["progress"]}
-                                                valueFormatter={(v) => `${v}%`}
-                                            />
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                                */ }
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                                     <StatCard
@@ -145,8 +158,12 @@ export const ProjectDetails = ({ project: initialProject, onBack }: ProjectDetai
                                     />
                                     <StatCard
                                         title="Upcoming Deadlines"
-                                        value="--"
-                                        subValue="No immediate deadlines"
+                                        value={project.upcomingDeadlines?.count || 0}
+                                        subValue={
+                                            project.upcomingDeadlines?.nearestDueDate
+                                                ? `Next due ${formatTaskDate(project.upcomingDeadlines.nearestDueDate)}`
+                                                : "No immediate deadlines"
+                                        }
                                         icon={Clock}
                                         iconClass="text-warning-600 bg-warning-50"
                                     />
@@ -172,8 +189,12 @@ export const ProjectDetails = ({ project: initialProject, onBack }: ProjectDetai
                                                     <TaskRow 
                                                         key={task.id}
                                                         title={task.title} 
-                                                        status={task.status.replace('_', ' ').charAt(0).toUpperCase() + task.status.slice(1)} 
                                                         priority={task.priority?.charAt(0).toUpperCase() + task.priority?.slice(1) || "Medium"} 
+                                                        dueDate={task.due_date}
+                                                        onClick={() => {
+                                                            setSelectedUpcomingTaskId(task.id);
+                                                            setSelectedTab("tasks");
+                                                        }}
                                                     />
                                                 ))
                                             ) : (
@@ -246,7 +267,7 @@ export const ProjectDetails = ({ project: initialProject, onBack }: ProjectDetai
                     </Tabs.Panel>
 
                     <Tabs.Panel id="tasks">
-                        <ProjectTasks projectId={project.id} />
+                        <ProjectTasks projectId={project.id} initialSelectedTaskId={selectedUpcomingTaskId} />
                     </Tabs.Panel>
 
                     <Tabs.Panel id="team">
@@ -286,8 +307,12 @@ const StatCard = ({ title, value, subValue, icon: Icon, iconClass }: any) => (
     </Card>
 );
 
-const TaskRow = ({ title, status, priority }: any) => (
-    <div className="py-4 grid grid-cols-[1fr_100px_80px] items-center gap-4 group cursor-pointer">
+const TaskRow = ({ title, priority, dueDate, onClick }: any) => (
+    <button
+        type="button"
+        onClick={onClick}
+        className="w-full py-4 grid grid-cols-[1fr_100px_80px] items-center gap-4 group cursor-pointer text-left"
+    >
         <div className="flex items-center gap-3 min-w-0">
             <div className="size-5 shrink-0 rounded border border-gray-300 group-hover:border-brand-600 transition-colors" />
             <span className="text-sm font-medium text-gray-700 transition-colors group-hover:text-gray-900 truncate">{title}</span>
@@ -298,17 +323,7 @@ const TaskRow = ({ title, status, priority }: any) => (
             </Badge>
         </div>
         <div className="text-right">
-            <span className="text-xs text-gray-500 whitespace-nowrap">{status}</span>
+            <span className="text-xs text-gray-500 whitespace-nowrap">{formatTaskDate(dueDate)}</span>
         </div>
-    </div>
-);
-
-const AssetLink = ({ name, size }: any) => (
-    <div className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer group">
-        <div className="flex items-center gap-2 overflow-hidden">
-            <Paperclip className="size-4 text-gray-400 group-hover:text-brand-600" />
-            <span className="text-sm text-gray-700 truncate">{name}</span>
-        </div>
-        <span className="text-xs text-gray-400 whitespace-nowrap ml-2">{size}</span>
-    </div>
+    </button>
 );

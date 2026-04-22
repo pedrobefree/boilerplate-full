@@ -7,6 +7,77 @@ import { recordCurrentUserActivity } from "@/lib/activity-log";
 import { slugify } from "@/lib/utils";
 import { buildAppUrl, sendTaskAssignedEmail } from "@/lib/email";
 
+const ELIGIBLE_ORGANIZATION_ROLES = ["owner", "admin", "member"] as const;
+
+async function getProjectContext(
+    supabase: Awaited<ReturnType<typeof createClient>>,
+    projectId: string
+) {
+    const { data: project, error } = await supabase
+        .from("projects")
+        .select("id, organization_id, is_private, slug, name")
+        .eq("id", projectId)
+        .maybeSingle();
+
+    if (error) {
+        throw error;
+    }
+
+    return project;
+}
+
+async function ensureAssigneeIsProjectMember(params: {
+    supabase: Awaited<ReturnType<typeof createClient>>;
+    projectId: string;
+    assigneeId: string;
+}) {
+    const project = await getProjectContext(params.supabase, params.projectId);
+    if (!project || project.is_private) {
+        return;
+    }
+
+    const { data: membership, error: membershipError } = await params.supabase
+        .from("organization_members")
+        .select("user_id")
+        .eq("organization_id", project.organization_id)
+        .eq("user_id", params.assigneeId)
+        .in("role", [...ELIGIBLE_ORGANIZATION_ROLES])
+        .maybeSingle();
+
+    if (membershipError) {
+        throw membershipError;
+    }
+
+    if (!membership) {
+        throw new Error("The selected assignee is not an eligible member of the active organization.");
+    }
+
+    const { data: existingProjectMember, error: projectMemberError } = await params.supabase
+        .from("project_members")
+        .select("user_id")
+        .eq("project_id", params.projectId)
+        .eq("user_id", params.assigneeId)
+        .maybeSingle();
+
+    if (projectMemberError) {
+        throw projectMemberError;
+    }
+
+    if (!existingProjectMember) {
+        const { error: insertError } = await params.supabase
+            .from("project_members")
+            .insert({
+                project_id: params.projectId,
+                user_id: params.assigneeId,
+                role: "member",
+            });
+
+        if (insertError) {
+            throw insertError;
+        }
+    }
+}
+
 async function notifyTaskAssignment(params: {
     supabase: Awaited<ReturnType<typeof createClient>>;
     taskId: string;
@@ -56,7 +127,7 @@ async function notifyTaskAssignment(params: {
         projectName: project.name,
         status: params.status,
         dueDate: params.dueDate,
-        taskUrl: buildAppUrl(`/projects/${project.slug}?task=${params.taskId}`),
+        taskUrl: buildAppUrl(`/dashboard/projects/${project.slug}?task=${params.taskId}`),
         assignedByName,
     });
 }
@@ -94,11 +165,7 @@ export async function createTask(data: {
         if (error) throw error;
 
         if (task) {
-            const { data: project } = await supabase
-                .from("projects")
-                .select("organization_id")
-                .eq("id", task.project_id)
-                .maybeSingle();
+            const project = await getProjectContext(supabase, task.project_id);
 
             await recordCurrentUserActivity({
                 organizationId: project?.organization_id,
@@ -114,6 +181,12 @@ export async function createTask(data: {
             });
 
             if (task.assignee_id) {
+                await ensureAssigneeIsProjectMember({
+                    supabase,
+                    projectId: task.project_id,
+                    assigneeId: task.assignee_id,
+                });
+
                 await notifyTaskAssignment({
                     supabase,
                     taskId: task.id,
@@ -126,8 +199,10 @@ export async function createTask(data: {
             }
         }
 
-        revalidatePath(`/dashboard/projects/${data.projectId}`);
-        // Also revalidate the generic projects page if we show task counts
+        const project = await getProjectContext(supabase, data.projectId);
+        if (project?.slug) {
+            revalidatePath(`/dashboard/projects/${project.slug}`);
+        }
         revalidatePath(`/dashboard/projects`);
         return task;
     }, { action: "createTask", projectId: data.projectId });
@@ -138,8 +213,8 @@ export async function updateTask(taskId: string, data: Partial<{
     description: string;
     status: 'todo' | 'in-progress' | 'done';
     priority: 'low' | 'medium' | 'high';
-    dueDate: string;
-    assigneeId: string;
+    dueDate: string | null;
+    assigneeId: string | null;
 }>) {
     return withErrorHandling(async () => {
         const supabase = await createClient();
@@ -154,8 +229,8 @@ export async function updateTask(taskId: string, data: Partial<{
         if (data.title !== undefined) updatePayload.slug = slugify(data.title);
         
         // Map camelCase to snake_case
-        if (data.dueDate !== undefined) updatePayload.due_date = data.dueDate;
-        if (data.assigneeId !== undefined) updatePayload.assignee_id = data.assigneeId;
+        if (data.dueDate !== undefined) updatePayload.due_date = data.dueDate || null;
+        if (data.assigneeId !== undefined) updatePayload.assignee_id = data.assigneeId || null;
         // Clean up unmapped props
         delete updatePayload.dueDate;
         delete updatePayload.assigneeId;
@@ -206,6 +281,14 @@ export async function updateTask(taskId: string, data: Partial<{
         }
 
         if (task) {
+            if (task.assignee_id) {
+                await ensureAssigneeIsProjectMember({
+                    supabase,
+                    projectId: task.project_id,
+                    assigneeId: task.assignee_id,
+                });
+            }
+
             if (task.assignee_id && existingTask?.assignee_id !== task.assignee_id) {
                 await notifyTaskAssignment({
                     supabase,
@@ -218,8 +301,12 @@ export async function updateTask(taskId: string, data: Partial<{
                 });
             }
 
-            revalidatePath(`/dashboard/projects/${task.project_id}`);
+            const project = await getProjectContext(supabase, task.project_id);
+            if (project?.slug) {
+                revalidatePath(`/dashboard/projects/${project.slug}`);
+            }
         }
+        revalidatePath(`/dashboard/projects`);
         return task;
     }, { action: "updateTask", taskId });
 }
@@ -243,8 +330,12 @@ export async function deleteTask(taskId: string) {
         if (error) throw error;
 
         if (task) {
-            revalidatePath(`/dashboard/projects/${task.project_id}`);
+            const project = await getProjectContext(supabase, task.project_id);
+            if (project?.slug) {
+                revalidatePath(`/dashboard/projects/${project.slug}`);
+            }
         }
+        revalidatePath(`/dashboard/projects`);
         return true;
     }, { action: "deleteTask", taskId });
 }
@@ -315,12 +406,22 @@ export async function getAssignableMembers(projectId: string) {
                 .from("organization_members")
                 .select(`
                     user_id,
+                    role,
                     profile:profiles!user_id(id, full_name, avatar_url, email)
                 `)
-                .eq("organization_id", project.organization_id);
+                .eq("organization_id", project.organization_id)
+                .in("role", [...ELIGIBLE_ORGANIZATION_ROLES]);
 
             if (membersError) throw membersError;
-            return members.map(m => m.profile);
+
+            const uniqueMembers = new Map<string, any>();
+            for (const member of members || []) {
+                if (!uniqueMembers.has(member.user_id)) {
+                    uniqueMembers.set(member.user_id, member.profile);
+                }
+            }
+
+            return Array.from(uniqueMembers.values()).filter(Boolean);
         }
     }, { action: "getAssignableMembers", projectId });
 }

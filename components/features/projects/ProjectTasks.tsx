@@ -1,5 +1,8 @@
-import { useState, useEffect } from "react";
+"use client";
+
+import { useEffect, useState } from "react";
 import { List, LayoutGrid, Plus, Search, MoreHorizontal, Clock } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -11,68 +14,128 @@ import { CreateTaskModal } from "./CreateTaskModal";
 import { getProjectTasks, updateTaskStatus } from "@/app/actions/tasks";
 import { useToast } from "@/components/ui/Toast";
 
-interface Task {
+interface TaskAssignee {
     id: string;
+    fullName: string | null;
+    avatarUrl: string | null;
+    email?: string | null;
+}
+
+export interface ProjectTask {
+    id: string;
+    projectId: string;
     title: string;
     status: "todo" | "in-progress" | "done";
     priority: "low" | "medium" | "high";
-    dueDate: string;
-    assignee: string;
+    dueDate: string | null;
     description?: string;
-    notes?: string;
+    assignee: TaskAssignee | null;
 }
 
-export const ProjectTasks = ({ projectId }: { projectId: string }) => {
+function formatTaskDate(dateValue: string | null) {
+    if (!dateValue) {
+        return "No date";
+    }
+
+    const match = dateValue.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    const date = match
+        ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12, 0, 0, 0)
+        : new Date(dateValue);
+    if (Number.isNaN(date.getTime())) {
+        return "No date";
+    }
+
+    return date.toLocaleDateString();
+}
+
+function mapTask(task: any): ProjectTask {
+    return {
+        id: task.id,
+        projectId: task.project_id,
+        title: task.title,
+        status: task.status,
+        priority: task.priority,
+        dueDate: task.due_date || null,
+        description: task.description || "",
+        assignee: task.assignee
+            ? {
+                id: task.assignee.id,
+                fullName: task.assignee.full_name || null,
+                avatarUrl: task.assignee.avatar_url || null,
+                email: task.assignee.email || null,
+            }
+            : null,
+    };
+}
+
+export const ProjectTasks = ({ projectId, initialSelectedTaskId }: { projectId: string; initialSelectedTaskId?: string | null }) => {
+    const router = useRouter();
     const [view, setView] = useState<"list" | "kanban">("kanban");
     const [search, setSearch] = useState("");
-    const [tasks, setTasks] = useState<Task[]>([]);
-    const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+    const [tasks, setTasks] = useState<ProjectTask[]>([]);
+    const [selectedTask, setSelectedTask] = useState<ProjectTask | null>(null);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-    const [createModalInitialStatus, setCreateModalInitialStatus] = useState<Task["status"]>("todo");
+    const [createModalInitialStatus, setCreateModalInitialStatus] = useState<ProjectTask["status"]>("todo");
     const { addToast } = useToast();
 
-    const fetchTasks = () => {
-        if (projectId) {
-            getProjectTasks(projectId).then(res => {
-                if (res.success && res.data) {
-                    setTasks(res.data.map((t: any) => ({
-                        id: t.id,
-                        title: t.title,
-                        status: t.status,
-                        priority: t.priority,
-                        dueDate: t.due_date ? new Date(t.due_date).toLocaleDateString() : "",
-                        assignee: t.assignee?.avatar_url || "",
-                        description: t.description || "",
-                        notes: ""
-                    })));
+    const fetchTasks = async () => {
+        if (!projectId) {
+            return;
+        }
+
+        const res = await getProjectTasks(projectId);
+        if (res.success && res.data) {
+            const mappedTasks = res.data.map(mapTask);
+            setTasks(mappedTasks);
+
+            setSelectedTask((currentTask) => {
+                if (!currentTask) {
+                    return null;
                 }
+
+                return mappedTasks.find((task) => task.id === currentTask.id) || null;
             });
         }
     };
 
     useEffect(() => {
-        fetchTasks();
+        void fetchTasks();
     }, [projectId]);
 
-    const filteredTasks = tasks.filter(t => t.title.toLowerCase().includes(search.toLowerCase()));
+    useEffect(() => {
+        if (!initialSelectedTaskId || tasks.length === 0) {
+            return;
+        }
+
+        const matchingTask = tasks.find((task) => task.id === initialSelectedTaskId);
+        if (matchingTask) {
+            setSelectedTask(matchingTask);
+        }
+    }, [initialSelectedTaskId, tasks]);
+
+    const filteredTasks = tasks.filter((task) => task.title.toLowerCase().includes(search.toLowerCase()));
 
     const handleDragStart = (e: React.DragEvent, taskId: string) => {
         e.dataTransfer.setData("taskId", taskId);
     };
 
-    const handleDrop = async (e: React.DragEvent, status: Task["status"]) => {
+    const handleTaskMutation = async () => {
+        await fetchTasks();
+        router.refresh();
+    };
+
+    const handleDrop = async (e: React.DragEvent, status: ProjectTask["status"]) => {
         e.preventDefault();
         const taskId = e.dataTransfer.getData("taskId");
 
-        // Optimistic update
-        setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status } : t));
+        setTasks((prev) => prev.map((task) => (task.id === taskId ? { ...task, status } : task)));
 
         const res = await updateTaskStatus(taskId, status);
         if (!res.success) {
-            // Revert on failure
             addToast({ title: "Error", description: "Failed to update task status", type: "error" });
-            // TODO: refetch or revert
         }
+
+        await handleTaskMutation();
     };
 
     const handleDragOver = (e: React.DragEvent) => {
@@ -122,7 +185,7 @@ export const ProjectTasks = ({ projectId }: { projectId: string }) => {
                     <KanbanColumn
                         title="Todo"
                         status="todo"
-                        tasks={filteredTasks.filter(t => t.status === "todo")}
+                        tasks={filteredTasks.filter((task) => task.status === "todo")}
                         onDrop={handleDrop}
                         onDragOver={handleDragOver}
                         onDragStart={handleDragStart}
@@ -135,7 +198,7 @@ export const ProjectTasks = ({ projectId }: { projectId: string }) => {
                     <KanbanColumn
                         title="In Progress"
                         status="in-progress"
-                        tasks={filteredTasks.filter(t => t.status === "in-progress")}
+                        tasks={filteredTasks.filter((task) => task.status === "in-progress")}
                         onDrop={handleDrop}
                         onDragOver={handleDragOver}
                         onDragStart={handleDragStart}
@@ -148,7 +211,7 @@ export const ProjectTasks = ({ projectId }: { projectId: string }) => {
                     <KanbanColumn
                         title="Done"
                         status="done"
-                        tasks={filteredTasks.filter(t => t.status === "done")}
+                        tasks={filteredTasks.filter((task) => task.status === "done")}
                         onDrop={handleDrop}
                         onDragOver={handleDragOver}
                         onDragStart={handleDragStart}
@@ -163,7 +226,7 @@ export const ProjectTasks = ({ projectId }: { projectId: string }) => {
                 <Card>
                     <CardContent className="p-0">
                         <div className="divide-y divide-gray-100">
-                            {filteredTasks.map(task => (
+                            {filteredTasks.map((task) => (
                                 <TaskListItem
                                     key={task.id}
                                     task={task}
@@ -179,6 +242,10 @@ export const ProjectTasks = ({ projectId }: { projectId: string }) => {
                 task={selectedTask}
                 isOpen={!!selectedTask}
                 onClose={() => setSelectedTask(null)}
+                onTaskUpdated={async () => {
+                    setSelectedTask(null);
+                    await handleTaskMutation();
+                }}
             />
 
             <CreateTaskModal
@@ -186,23 +253,7 @@ export const ProjectTasks = ({ projectId }: { projectId: string }) => {
                 onClose={() => setIsCreateModalOpen(false)}
                 projectId={projectId}
                 initialStatus={createModalInitialStatus}
-                onTaskCreated={() => {
-                    // Refresh tasks
-                    getProjectTasks(projectId).then(res => {
-                        if (res.success && res.data) {
-                            setTasks(res.data.map((t: any) => ({
-                                id: t.id,
-                                title: t.title,
-                                status: t.status,
-                                priority: t.priority,
-                                dueDate: t.due_date ? new Date(t.due_date).toLocaleDateString() : "",
-                                assignee: t.assignee?.avatar_url || "",
-                                description: t.description || "",
-                                notes: ""
-                            })));
-                        }
-                    });
-                }}
+                onTaskCreated={handleTaskMutation}
             />
         </div>
     );
@@ -210,12 +261,12 @@ export const ProjectTasks = ({ projectId }: { projectId: string }) => {
 
 interface ColumnProps {
     title: string;
-    status: Task["status"];
-    tasks: Task[];
-    onDrop: (e: React.DragEvent, status: Task["status"]) => void;
+    status: ProjectTask["status"];
+    tasks: ProjectTask[];
+    onDrop: (e: React.DragEvent, status: ProjectTask["status"]) => void;
     onDragOver: (e: React.DragEvent) => void;
     onDragStart: (e: React.DragEvent, taskId: string) => void;
-    onTaskClick: (task: Task) => void;
+    onTaskClick: (task: ProjectTask) => void;
     onAddTask: () => void;
 }
 
@@ -237,7 +288,7 @@ const KanbanColumn = ({ title, status, tasks, onDrop, onDragOver, onDragStart, o
             </button>
         </div>
         <div className="space-y-3 min-h-[500px] p-2 bg-gray-50/50 rounded-xl border border-dashed border-gray-200 transition-colors hover:border-gray-300">
-            {tasks.map(task => (
+            {tasks.map((task) => (
                 <KanbanCard
                     key={task.id}
                     task={task}
@@ -255,7 +306,7 @@ const KanbanColumn = ({ title, status, tasks, onDrop, onDragOver, onDragStart, o
     </div>
 );
 
-const KanbanCard = ({ task, onDragStart, onClick }: { task: Task, onDragStart: (e: React.DragEvent, id: string) => void, onClick: () => void }) => (
+const KanbanCard = ({ task, onDragStart, onClick }: { task: ProjectTask; onDragStart: (e: React.DragEvent, id: string) => void; onClick: () => void }) => (
     <Card
         draggable
         onDragStart={(e) => onDragStart(e, task.id)}
@@ -276,24 +327,31 @@ const KanbanCard = ({ task, onDragStart, onClick }: { task: Task, onDragStart: (
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-xs text-gray-500">
                     <Clock className="size-3" />
-                    <span>{task.dueDate}</span>
+                    <span>{formatTaskDate(task.dueDate)}</span>
                 </div>
-                <Avatar src={task.assignee} size="xs" />
+                <Avatar
+                    src={task.assignee?.avatarUrl}
+                    alt={task.assignee?.fullName || "Unassigned"}
+                    initials={task.assignee?.fullName?.charAt(0).toUpperCase()}
+                    size="xs"
+                />
             </div>
         </CardContent>
     </Card>
 );
 
-const TaskListItem = ({ task, onClick }: { task: Task, onClick: () => void }) => (
+const TaskListItem = ({ task, onClick }: { task: ProjectTask; onClick: () => void }) => (
     <div
         onClick={onClick}
         className="p-4 flex items-center justify-between gap-4 hover:bg-gray-50 transition-colors cursor-pointer group"
     >
         <div className="flex items-center gap-4 min-w-0">
-            <div className={cx(
-                "size-5 rounded-full border flex items-center justify-center shrink-0 transition-colors",
-                task.status === "done" ? "bg-success-600 border-success-600 text-white" : "border-gray-200 bg-white group-hover:border-brand-600"
-            )}>
+            <div
+                className={cx(
+                    "size-5 rounded-full border flex items-center justify-center shrink-0 transition-colors",
+                    task.status === "done" ? "bg-success-600 border-success-600 text-white" : "border-gray-200 bg-white group-hover:border-brand-600"
+                )}
+            >
                 {task.status === "done" && <Plus className="size-3 rotate-45" />}
             </div>
             <div className="min-w-0">
@@ -302,7 +360,7 @@ const TaskListItem = ({ task, onClick }: { task: Task, onClick: () => void }) =>
                 </p>
                 <div className="flex items-center gap-3 mt-0.5">
                     <span className="text-xs text-gray-500 flex items-center gap-1">
-                        <Clock className="size-3" /> {task.dueDate}
+                        <Clock className="size-3" /> {formatTaskDate(task.dueDate)}
                     </span>
                     <Badge variant="default" size="sm" className="bg-gray-50 text-gray-600 uppercase text-[10px] tracking-wider font-bold">
                         {task.priority}
@@ -311,7 +369,12 @@ const TaskListItem = ({ task, onClick }: { task: Task, onClick: () => void }) =>
             </div>
         </div>
         <div className="flex items-center gap-3">
-            <Avatar src={task.assignee} size="sm" />
+            <Avatar
+                src={task.assignee?.avatarUrl}
+                alt={task.assignee?.fullName || "Unassigned"}
+                initials={task.assignee?.fullName?.charAt(0).toUpperCase()}
+                size="sm"
+            />
             <button className="p-1 px-2 text-gray-400 hover:text-gray-600 transition-colors">
                 <MoreHorizontal className="size-4" />
             </button>

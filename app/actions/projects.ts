@@ -7,6 +7,152 @@ import { recordCurrentUserActivity } from "@/lib/activity-log";
 import { slugify } from "@/lib/utils";
 import { buildAppUrl, sendProjectAssignedEmail } from "@/lib/email";
 
+const ELIGIBLE_ORGANIZATION_ROLES = ["owner", "admin", "member"] as const;
+const UPCOMING_DEADLINE_WINDOW_DAYS = 7;
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
+
+function parseProjectDate(dateValue: string | null | undefined) {
+    if (!dateValue) {
+        return null;
+    }
+
+    const match = dateValue.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+        const [, year, month, day] = match;
+        return new Date(Number(year), Number(month) - 1, Number(day), 12, 0, 0, 0);
+    }
+
+    const parsed = new Date(dateValue);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function isUpcomingDeadline(dateValue: string | null | undefined, now: Date) {
+    const dueDate = parseProjectDate(dateValue);
+    if (!dueDate) {
+        return false;
+    }
+
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const diff = dueDate.getTime() - startOfToday.getTime();
+    return diff >= 0 && diff <= UPCOMING_DEADLINE_WINDOW_DAYS * DAY_IN_MS;
+}
+
+async function assertEligibleOrganizationUsers(params: {
+    supabase: Awaited<ReturnType<typeof createClient>>;
+    organizationId: string;
+    userIds: string[];
+}) {
+    const uniqueUserIds = Array.from(new Set(params.userIds.filter(Boolean)));
+
+    if (uniqueUserIds.length === 0) {
+        return;
+    }
+
+    const { data, error } = await params.supabase
+        .from("organization_members")
+        .select("user_id")
+        .eq("organization_id", params.organizationId)
+        .in("user_id", uniqueUserIds)
+        .in("role", [...ELIGIBLE_ORGANIZATION_ROLES]);
+
+    if (error) {
+        throw error;
+    }
+
+    const eligibleIds = new Set((data || []).map((member) => member.user_id));
+    const invalidIds = uniqueUserIds.filter((userId) => !eligibleIds.has(userId));
+
+    if (invalidIds.length > 0) {
+        throw new Error("Only organization owners, admins, or members can be associated with this project.");
+    }
+}
+
+async function getProjectMembersWithProfiles(
+    supabase: Awaited<ReturnType<typeof createClient>>,
+    projectId: string
+) {
+    const { data: rawMembers, error: membersError } = await supabase
+        .from("project_members")
+        .select("user_id, role")
+        .eq("project_id", projectId);
+
+    if (membersError) {
+        throw membersError;
+    }
+
+    if (!rawMembers || rawMembers.length === 0) {
+        return [];
+    }
+
+    const userIds = rawMembers.map((member) => member.user_id);
+    const { data: profiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, full_name, avatar_url, email")
+        .in("id", userIds);
+
+    if (profilesError) {
+        throw profilesError;
+    }
+
+    return rawMembers.map((member) => ({
+        ...member,
+        profile: profiles?.find((profile) => profile.id === member.user_id) || null,
+    }));
+}
+
+async function buildProjectSnapshot(
+    supabase: Awaited<ReturnType<typeof createClient>>,
+    project: any
+) {
+    const [tasksResult, membersResult] = await Promise.all([
+        supabase
+            .from("tasks")
+            .select("id, title, status, priority, due_date, assignee_id")
+            .eq("project_id", project.id)
+            .order("due_date", { ascending: true, nullsFirst: false }),
+        getProjectMembersWithProfiles(supabase, project.id),
+    ]);
+
+    if (tasksResult.error) {
+        throw tasksResult.error;
+    }
+
+    const tasks = tasksResult.data || [];
+    const totalTasks = tasks.length;
+    const doneTasks = tasks.filter((task) => task.status === "done").length;
+    const openTasksWithDeadlines = tasks
+        .filter((task) => task.status !== "done" && task.due_date)
+        .sort((a, b) => {
+            const aTime = parseProjectDate(a.due_date)?.getTime() || Number.MAX_SAFE_INTEGER;
+            const bTime = parseProjectDate(b.due_date)?.getTime() || Number.MAX_SAFE_INTEGER;
+            return aTime - bTime;
+        });
+
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const futureOpenTasksWithDeadlines = openTasksWithDeadlines.filter((task) => {
+        const parsed = parseProjectDate(task.due_date);
+        return parsed ? parsed.getTime() >= startOfToday.getTime() : false;
+    });
+    const upcomingDeadlineTasks = openTasksWithDeadlines.filter((task) => isUpcomingDeadline(task.due_date, now));
+    const upcomingTasks = (upcomingDeadlineTasks.length > 0 ? upcomingDeadlineTasks : futureOpenTasksWithDeadlines).slice(0, 5);
+
+    return {
+        ...project,
+        members: membersResult,
+        upcomingTasks,
+        upcomingDeadlines: {
+            count: upcomingDeadlineTasks.length,
+            nearestDueDate: futureOpenTasksWithDeadlines[0]?.due_date || null,
+        },
+        taskStats: {
+            total: totalTasks,
+            done: doneTasks,
+            progress: totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0,
+        },
+    };
+}
+
 async function syncProjectAssignments(params: {
     supabase: Awaited<ReturnType<typeof createClient>>;
     project: { id: string; slug: string; name: string; organization_id: string };
@@ -29,6 +175,12 @@ async function syncProjectAssignments(params: {
     if (desiredAssignments.size === 0) {
         return;
     }
+
+    await assertEligibleOrganizationUsers({
+        supabase: params.supabase,
+        organizationId: params.project.organization_id,
+        userIds: Array.from(desiredAssignments.keys()),
+    });
 
     const { data: existingMembers } = await params.supabase
         .from("project_members")
@@ -278,32 +430,7 @@ export async function getProject(id: string) {
             .single();
 
         if (error) throw error;
-
-        // Fetch members and their profiles using a separate query to avoid schema join issues
-        const { data: rawMembers, error: membersError } = await supabase
-            .from("project_members")
-            .select("user_id, role")
-            .eq("project_id", id);
-
-        if (membersError) throw membersError;
-
-        let projectMembers = [];
-        if (rawMembers && rawMembers.length > 0) {
-            const userIds = rawMembers.map(m => m.user_id);
-            const { data: profiles } = await supabase
-                .from("profiles")
-                .select("id, full_name, avatar_url, email")
-                .in("id", userIds);
-
-            projectMembers = rawMembers.map(m => ({
-                ...m,
-                profile: profiles?.find(p => p.id === m.user_id) || null
-            }));
-        }
-
-        return { ...project, members: projectMembers };
-
-        return { ...project, members: projectMembers };
+        return buildProjectSnapshot(supabase, project);
     }, { action: "getProject", id });
 }
 
@@ -323,57 +450,7 @@ export async function getProjectBySlug(slug: string) {
         if (error) throw error;
 
         if (!project) return null;
-
-        // Fetch task statuses for progress
-        const { data: tasks } = await supabase
-            .from("tasks")
-            .select("status")
-            .eq("project_id", project.id);
-
-        const totalTasks = tasks?.length || 0;
-        const doneTasks = tasks?.filter(t => t.status === 'done').length || 0;
-
-        // Fetch members and their profiles using a separate query to avoid schema join issues
-        const { data: rawMembers, error: membersError } = await supabase
-            .from("project_members")
-            .select("user_id, role")
-            .eq("project_id", project.id);
-
-        if (membersError) throw membersError;
-
-        let projectMembers = [];
-        if (rawMembers && rawMembers.length > 0) {
-            const userIds = rawMembers.map(m => m.user_id);
-            const { data: profiles } = await supabase
-                .from("profiles")
-                .select("id, full_name, avatar_url, email")
-                .in("id", userIds);
-
-            projectMembers = rawMembers.map(m => ({
-                ...m,
-                profile: profiles?.find(p => p.id === m.user_id) || null
-            }));
-        }
-
-        // Fetch upcoming tasks (first 3 incomplete)
-        const { data: upcomingTasks } = await supabase
-            .from("tasks")
-            .select("*")
-            .eq("project_id", project.id)
-            .neq("status", "done")
-            .order("due_date", { ascending: true })
-            .limit(3);
-
-        return { 
-            ...project, 
-            members: projectMembers,
-            upcomingTasks: upcomingTasks || [],
-            taskStats: {
-                total: totalTasks,
-                done: doneTasks,
-                progress: totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0
-            }
-        };
+        return buildProjectSnapshot(supabase, project);
     }, { action: "getProjectBySlug", slug });
 }
 
@@ -452,6 +529,21 @@ export async function getMyProjects() {
 export async function addProjectMember(projectId: string, userId: string, role: string = 'member') {
     return withErrorHandling(async () => {
         const supabase = await createClient();
+        const { data: project, error: projectError } = await supabase
+            .from("projects")
+            .select("id, organization_id, slug")
+            .eq("id", projectId)
+            .maybeSingle();
+
+        if (projectError) throw projectError;
+        if (!project) throw new Error("Project not found.");
+
+        await assertEligibleOrganizationUsers({
+            supabase,
+            organizationId: project.organization_id,
+            userIds: [userId],
+        });
+
         const { error } = await supabase
             .from("project_members")
             .insert({
@@ -462,6 +554,7 @@ export async function addProjectMember(projectId: string, userId: string, role: 
 
         if (error) throw error;
         revalidatePath(`/dashboard/projects`);
+        revalidatePath(`/dashboard/projects/${project.slug}`);
         return { success: true };
     }, { action: "addProjectMember", projectId, userId });
 }
@@ -469,6 +562,12 @@ export async function addProjectMember(projectId: string, userId: string, role: 
 export async function removeProjectMember(projectId: string, userId: string) {
     return withErrorHandling(async () => {
         const supabase = await createClient();
+        const { data: project } = await supabase
+            .from("projects")
+            .select("slug")
+            .eq("id", projectId)
+            .maybeSingle();
+
         const { error } = await supabase
             .from("project_members")
             .delete()
@@ -477,6 +576,9 @@ export async function removeProjectMember(projectId: string, userId: string) {
 
         if (error) throw error;
         revalidatePath(`/dashboard/projects`);
+        if (project?.slug) {
+            revalidatePath(`/dashboard/projects/${project.slug}`);
+        }
         return { success: true };
     }, { action: "removeProjectMember", projectId, userId });
 }

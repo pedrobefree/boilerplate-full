@@ -26,7 +26,9 @@ export default async function ProjectPage({ params }: PageProps) {
         team: project.members ? project.members.map((m: any) => m.profile?.avatar_url || "/api/placeholder/32/32") : [],
         category: "General",
         taskStats: project.taskStats,
-        members: project.members
+        members: project.members,
+        upcomingTasks: project.upcomingTasks || [],
+        upcomingDeadlines: project.upcomingDeadlines,
     };
 
     return (

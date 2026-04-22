@@ -7,6 +7,12 @@ import { cookies } from "next/headers";
 import { recordCurrentUserActivity } from "@/lib/activity-log";
 
 const ACTIVE_ORG_COOKIE = "current_org_id";
+const ELIGIBLE_ORGANIZATION_ROLES = ["owner", "admin", "member"] as const;
+const ORGANIZATION_ROLE_PRIORITY: Record<(typeof ELIGIBLE_ORGANIZATION_ROLES)[number], number> = {
+    owner: 3,
+    admin: 2,
+    member: 1,
+};
 
 async function getActiveOrg() {
     const cookieStore = await cookies();
@@ -179,13 +185,42 @@ export async function getOrganizationMembers() {
                 role,
                 profile:profiles!user_id(id, full_name, avatar_url, email)
             `)
-            .eq("organization_id", orgId);
+            .eq("organization_id", orgId)
+            .in("role", [...ELIGIBLE_ORGANIZATION_ROLES]);
 
         if (error) throw error;
-        return data.map(m => ({
-            id: m.user_id,
-            role: m.role,
-            ...m.profile
-        }));
+
+        const uniqueMembers = new Map<string, {
+            id: string;
+            role: string;
+            full_name: string | null;
+            avatar_url: string | null;
+            email: string | null;
+        }>();
+
+        for (const member of data || []) {
+            const profile = Array.isArray(member.profile) ? member.profile[0] : member.profile;
+            const existing = uniqueMembers.get(member.user_id);
+            const nextPriority = ORGANIZATION_ROLE_PRIORITY[member.role as keyof typeof ORGANIZATION_ROLE_PRIORITY] || 0;
+            const currentPriority = existing
+                ? ORGANIZATION_ROLE_PRIORITY[existing.role as keyof typeof ORGANIZATION_ROLE_PRIORITY] || 0
+                : -1;
+
+            if (!existing || nextPriority >= currentPriority) {
+                uniqueMembers.set(member.user_id, {
+                    id: member.user_id,
+                    role: member.role,
+                    full_name: profile?.full_name || null,
+                    avatar_url: profile?.avatar_url || null,
+                    email: profile?.email || null,
+                });
+            }
+        }
+
+        return Array.from(uniqueMembers.values()).sort((a, b) => {
+            const aLabel = a.full_name || a.email || "";
+            const bLabel = b.full_name || b.email || "";
+            return aLabel.localeCompare(bLabel, "pt-BR");
+        });
     }, { action: "getOrganizationMembers" });
 }

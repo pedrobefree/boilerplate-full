@@ -176,14 +176,14 @@ Critérios de aceitação:
 - [x] Implementar adição e listagem de notas em uma tarefa
 - [x] Garantir que projetos e tarefas sejam escopados à organização ativa
 - [x] Garantir RLS: membros veem apenas projetos/tarefas da sua organização
-- [ ] Adicionar suporte a `slug` (parâmetro de URL amigável) nos projetos para identificação e compartilhamento de URL.
+- [x] Adicionar suporte a `slug` (parâmetro de URL amigável) nos projetos para identificação e compartilhamento de URL.
 - [ ] Implementar associação de um responsável (owner) e membros ao projeto respectivo.
 - [ ] Conectar membros de tarefas automaticamente como membros do projeto se a visibilidade for "toda a organização" (habilitar a aba de membros existente).
 - [ ] Alimentar os gráficos e indicadores na página de detalhes de projetos com dados reais do Supabase (substituir hard-coded).
-- [ ] Substituir dados hard-coded na listagem de tarefas da tela principal do projeto para dados reais recuperados do banco de dados.
+- [x] Substituir dados hard-coded na listagem de tarefas da tela principal do projeto para dados reais recuperados do banco de dados.
 - [ ] Corrigir e garantir que a associação de um "Responsável" (assignee) funcione ao criar/editar uma tarefa.
-- [ ] Ocultar o módulo/aba de Arquivos/Anexos das tarefas para a release V1.
-- [ ] Limpar a UI do módulo de projetos e tarefas, ocultando componentes, abas ou botões não utilizados na V1.
+- [x] Ocultar o módulo/aba de Arquivos/Anexos das tarefas para a release V1.
+- [x] Limpar a UI do módulo de projetos e tarefas, ocultando componentes, abas ou botões não utilizados na V1.
 
 ### Histórias de Usuário
 
@@ -214,7 +214,7 @@ Critérios de aceitação:
 Critérios de aceitação:
 - Notas podem ser inseridas, lidas e excluídas por seus autores.
 
-**US4.6** — Eu como membro da organização, quero interagir com uma interface limpa, focada e sem ruídos (como seções incompletas). *(Nova)*
+**US4.6** — Eu como membro da organização, quero interagir com uma interface limpa, focada e sem ruídos (como seções incompletas). *(Concluída)*
 Critérios de aceitação:
 - Aba de Arquivos/Anexos em Tarefas é ocultada.
 - Elementos gráficos, botões ou sub-menus sem funcionalidade imediata removidos ou ocultados.
@@ -224,35 +224,35 @@ Critérios de aceitação:
 ## Módulo 5 — Email Transacional
 
 ### Checklist
-- [ ] Avaliar e escolher provedor: Resend (DX superior, SDK TypeScript nativo), Brevo ou SMTP
-- [ ] Instalar SDK do provedor escolhido e configurar variáveis de ambiente
-- [ ] Criar utilitário `lib/email.ts` com função `sendEmail(to, subject, template, data)`
-- [ ] Criar templates HTML de email (mínimo inline CSS, responsivos):
-  - [ ] Template base (wrapper com logo e footer)
-  - [ ] Convite para organização
-  - [ ] Confirmação de pedido
-  - [ ] Pedido cancelado / estorno iniciado
-  - [ ] Solicitação de resgate de senha
-  - [ ] Projeto atribuído ao usuário
-  - [ ] Tarefa atribuída ao usuário
-  - [ ] Confirmação de pagamento para administrador da organização
-- [ ] Disparar email de convite ao criar/reenviar convite (`invitations.ts`)
-- [ ] Disparar email de confirmação ao criar pedido (webhook `payment_intent.succeeded`)
-- [ ] Disparar email ao administrador da organização quando um pedido tiver pagamento confirmado (`payment_intent.succeeded`)
-- [ ] Disparar email de cancelamento ao cancelar pedido (`orders.ts`)
-- [ ] Disparar email ao solicitar resgate de senha (`forgot-password` / fluxo de recuperação)
-- [ ] Disparar email ao atribuir um projeto a um usuário
-- [ ] Disparar email ao atribuir uma tarefa a um usuário
-- [ ] Garantir que falhas no envio de email não quebrem o fluxo principal (try/catch isolado)
-- [ ] Garantir idempotência para evitar emails duplicados em eventos de webhook e reatribuição sem mudança real
-- [ ] Garantir que o destinatário e o contexto do email respeitam a organização ativa e as permissões do usuário
-- [ ] Configurar domínio de envio no provedor (DNS: SPF, DKIM)
+- [x] Avaliar e escolher provedor: Resend (DX superior, SDK TypeScript nativo), Brevo ou SMTP
+- [x] Instalar SDK do provedor escolhido e configurar variáveis de ambiente
+- [x] Criar utilitário `lib/email.ts` com função `sendEmail(to, subject, template, data)`
+- [x] Criar templates HTML de email (mínimo inline CSS, responsivos):
+  - [x] Template base (wrapper com logo e footer)
+  - [x] Convite para organização
+  - [x] Confirmação de pedido
+  - [x] Pedido cancelado / estorno iniciado
+  - [x] Solicitação de resgate de senha
+  - [x] Projeto atribuído ao usuário
+  - [x] Tarefa atribuída ao usuário
+  - [x] Confirmação de pagamento para administrador da organização
+- [x] Disparar email de convite ao criar/reenviar convite (`invitations.ts`)
+- [x] Disparar email de confirmação ao criar pedido (webhook `payment_intent.succeeded`)
+- [x] Disparar email ao administrador da organização quando um pedido tiver pagamento confirmado (`payment_intent.succeeded`)
+- [x] Disparar email de cancelamento ao cancelar pedido (`orders.ts`)
+- [x] Disparar email ao solicitar resgate de senha (`forgot-password` / fluxo de recuperação)
+- [x] Disparar email ao atribuir um projeto a um usuário
+- [x] Disparar email ao atribuir uma tarefa a um usuário
+- [x] Garantir que falhas no envio de email não quebrem o fluxo principal (try/catch isolado)
+- [x] Garantir idempotência para evitar emails duplicados em eventos de webhook e reatribuição sem mudança real
+- [x] Garantir que o destinatário e o contexto do email respeitam a organização ativa e as permissões do usuário
+- [x] Configurar domínio de envio no provedor (DNS: SPF, DKIM)
 
 > **Recomendação de provedor:** Resend — SDK TypeScript nativo, excelente DX, suporte a React Email para templates, plano gratuito de 3.000 emails/mês. Ideal para boilerplate educacional.
 
 ### Histórias de Usuário
 
-**US5.1** — Eu como pessoa convidada para uma organização, quero receber um email com o link de convite para conseguir aceitar mesmo se fechar o navegador.
+**US5.1** — Eu como pessoa convidada para uma organização, quero receber um email com o link de convite para conseguir aceitar mesmo se fechar o navegador. *(Concluída)*
 
 Critérios de aceitação:
 - Email enviado automaticamente ao criar um convite
@@ -260,21 +260,21 @@ Critérios de aceitação:
 - Link de aceitação expira conforme configuração da organização
 - Email reenviado ao usar a opção "Reenviar convite"
 
-**US5.2** — Eu como cliente, quero receber um email de confirmação após realizar uma compra para ter o comprovante do meu pedido.
+**US5.2** — Eu como cliente, quero receber um email de confirmação após realizar uma compra para ter o comprovante do meu pedido. *(Concluída)*
 
 Critérios de aceitação:
 - Email enviado após confirmação de pagamento (`payment_intent.succeeded`)
 - Email contém: número do pedido, lista de itens com quantidades e preços, valor total, data do pedido
 - Email enviado para o endereço cadastrado no checkout
 
-**US5.3** — Eu como cliente, quando meu pedido é cancelado, quero receber um email informando sobre o cancelamento e o estorno.
+**US5.3** — Eu como cliente, quando meu pedido é cancelado, quero receber um email informando sobre o cancelamento e o estorno. *(Concluída)*
 
 Critérios de aceitação:
 - Email enviado ao cancelar um pedido (pelo cliente ou pelo admin)
 - Email informa: número do pedido, motivo (quando informado), prazo estimado para estorno no cartão
 - Email enviado para o endereço do cliente
 
-**US5.4** — Eu como usuário, quando solicito resgate de senha, quero receber um email com instruções seguras para redefinir minha senha.
+**US5.4** — Eu como usuário, quando solicito resgate de senha, quero receber um email com instruções seguras para redefinir minha senha. *(Concluída)*
 
 Critérios de aceitação:
 - Email enviado ao iniciar o fluxo de recuperação de senha
@@ -282,21 +282,21 @@ Critérios de aceitação:
 - Email informa de forma clara que a solicitação pode ser ignorada caso não tenha sido feita pelo usuário
 - O fluxo não expõe se o email informado existe ou não na base
 
-**US5.5** — Eu como membro da organização, quando um projeto for atribuído ao meu usuário, quero receber um email para saber que passei a ser responsável ou participante daquele projeto.
+**US5.5** — Eu como membro da organização, quando um projeto for atribuído ao meu usuário, quero receber um email para saber que passei a ser responsável ou participante daquele projeto. *(Concluída)*
 
 Critérios de aceitação:
 - Email enviado quando houver nova atribuição de projeto ao usuário
 - Email contém: nome do projeto, organização, papel do usuário no projeto e link direto para a página do projeto
 - O email não deve ser reenviado quando o registro for salvo sem mudança de atribuição
 
-**US5.6** — Eu como membro da organização, quando uma tarefa for atribuída ao meu usuário, quero receber um email para agir rapidamente sobre o trabalho pendente.
+**US5.6** — Eu como membro da organização, quando uma tarefa for atribuída ao meu usuário, quero receber um email para agir rapidamente sobre o trabalho pendente. *(Concluída)*
 
 Critérios de aceitação:
 - Email enviado quando uma tarefa recebe um novo responsável
 - Email contém: título da tarefa, projeto relacionado, status atual, prazo (quando houver) e link direto para a tarefa
 - O email não deve ser reenviado quando a edição não alterar o responsável
 
-**US5.7** — Eu como administrador da organização, quero receber um email sempre que um pedido tiver o pagamento confirmado para acompanhar o faturamento e a operação.
+**US5.7** — Eu como administrador da organização, quero receber um email sempre que um pedido tiver o pagamento confirmado para acompanhar o faturamento e a operação. *(Concluída)*
 
 Critérios de aceitação:
 - Email enviado ao administrador da organização após confirmação de pagamento (`payment_intent.succeeded`)
@@ -316,26 +316,26 @@ Critérios de aceitação:
 ## Módulo 6 — Dashboard com Dados Reais
 
 ### Checklist
-- [ ] Definir quais indicadores serão exibidos por papel (admin vs. membro)
-- [ ] Criar server actions para buscar dados agregados do dashboard:
-  - [ ] Total de pedidos (período atual vs. anterior)
-  - [ ] Receita total (período atual vs. anterior)
-  - [ ] Pedidos por status
-  - [ ] Total de membros ativos na organização
-  - [ ] Total de projetos ativos
-  - [ ] Total de tarefas por status
-  - [ ] Eventos recentes do activity log (últimos 5-10)
-- [ ] Implementar cards de KPI com variação percentual (ex: `+12% em relação ao mês anterior`)
-- [ ] Implementar gráfico de pedidos por período (linha ou barra — Recharts já instalado)
-- [ ] Implementar gráfico de distribuição de status de pedidos (pie/donut)
-- [ ] Implementar widget de atividade recente (últimos eventos do activity log)
-- [ ] Implementar widget de projetos ativos com barra de progresso
-- [ ] Garantir que todos os dados respeitam o escopo da organização ativa
-- [ ] Adicionar skeleton loading states durante carregamento dos dados
+- [x] Definir quais indicadores serão exibidos por papel (admin vs. membro)
+- [x] Criar server actions para buscar dados agregados do dashboard:
+  - [x] Total de pedidos (período atual vs. anterior)
+  - [x] Receita total (período atual vs. anterior)
+  - [x] Pedidos por status
+  - [x] Total de membros ativos na organização
+  - [x] Total de projetos ativos
+  - [x] Total de tarefas por status
+  - [x] Eventos recentes do activity log (últimos 5-10)
+- [x] Implementar cards de KPI com variação percentual (ex: `+12% em relação ao mês anterior`)
+- [x] Implementar gráfico de pedidos por período (linha ou barra — Recharts já instalado)
+- [x] Implementar gráfico de distribuição de status de pedidos (pie/donut)
+- [x] Implementar widget de atividade recente (últimos eventos do activity log)
+- [x] Implementar widget de projetos ativos com barra de progresso
+- [x] Garantir que todos os dados respeitam o escopo da organização ativa
+- [x] Adicionar skeleton loading states durante carregamento dos dados
 
 ### Histórias de Usuário
 
-**US6.1** — Eu como administrador da organização, quero ver indicadores de desempenho no dashboard para acompanhar a saúde do negócio.
+**US6.1** — Eu como administrador da organização, quero ver indicadores de desempenho no dashboard para acompanhar a saúde do negócio. *(Concluída)*
 
 Critérios de aceitação:
 - Cards de KPI exibem: total de pedidos, receita total, membros ativos e projetos ativos
@@ -343,28 +343,28 @@ Critérios de aceitação:
 - Variação positiva exibida em verde, negativa em vermelho
 - Dados são escopados à organização ativa
 
-**US6.2** — Eu como administrador, quero visualizar a evolução de pedidos e receita ao longo do tempo para identificar tendências.
+**US6.2** — Eu como administrador, quero visualizar a evolução de pedidos e receita ao longo do tempo para identificar tendências. *(Concluída)*
 
 Critérios de aceitação:
 - Gráfico de linha ou barra exibindo pedidos e/ou receita por dia/semana/mês
 - Seletor de período: últimos 7 dias, 30 dias, 3 meses
 - Gráfico responsivo e com tooltip ao passar o mouse
 
-**US6.3** — Eu como administrador, quero ver a distribuição atual dos pedidos por status para entender o backlog operacional.
+**US6.3** — Eu como administrador, quero ver a distribuição atual dos pedidos por status para entender o backlog operacional. *(Concluída)*
 
 Critérios de aceitação:
 - Gráfico de rosca (donut) exibindo proporção de pedidos por status
 - Legenda com quantidade absoluta por status
 - Clicável: ao clicar num status, redireciona para `/admin/orders?status=<status>`
 
-**US6.4** — Eu como membro da organização, quero ver um resumo dos projetos e tarefas no dashboard para acompanhar o andamento do trabalho.
+**US6.4** — Eu como membro da organização, quero ver um resumo dos projetos e tarefas no dashboard para acompanhar o andamento do trabalho. *(Concluída)*
 
 Critérios de aceitação:
 - Widget listando projetos ativos com: nome, progresso de tarefas e status
 - Widget de tarefas: total a fazer, em andamento e concluídas
 - Link direto para a página de projetos
 
-**US6.5** — Eu como administrador, quero ver as atividades recentes no dashboard para ter contexto rápido sobre o que aconteceu na organização.
+**US6.5** — Eu como administrador, quero ver as atividades recentes no dashboard para ter contexto rápido sobre o que aconteceu na organização. *(Concluída)*
 
 Critérios de aceitação:
 - Widget exibe os últimos 5-10 eventos do activity log

@@ -1,16 +1,16 @@
 "use client";
 
-import { UserPlus, Mail, Settings, MoreHorizontal, Trash2, Check, X } from "lucide-react";
+import { UserPlus, Mail, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table";
 import { useState, useEffect } from "react";
-import { addProjectMember, removeProjectMember, updateProjectMemberRole } from "@/app/actions/projects";
+import { addProjectMember, removeProjectMember } from "@/app/actions/projects";
 import { getOrganizationMembers } from "@/app/actions/organizations";
 import { useToast } from "@/components/ui/Toast";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 interface Member {
@@ -23,7 +23,6 @@ interface Member {
 }
 
 export const ProjectTeam = ({ projectId, members = [] }: { projectId: string, members?: any[] }) => {
-    const params = useParams();
     const router = useRouter();
     const { addToast } = useToast();
     const [orgMembers, setOrgMembers] = useState<any[]>([]);
@@ -97,11 +96,10 @@ export const ProjectTeam = ({ projectId, members = [] }: { projectId: string, me
                                 <option value="">Select member...</option>
                                 {orgMembers
                                     .filter(om => 
-                                        !members.some(m => m.user_id === om.id) && 
-                                        om.role !== "organization_member" // Filter out customers
+                                        !members.some(m => m.user_id === om.id)
                                     )
                                     .map(om => (
-                                        <option key={om.id} value={om.id}>{om.full_name}</option>
+                                        <option key={om.id} value={om.id}>{om.full_name || om.email}</option>
                                     ))
                                 }
                             </select>
