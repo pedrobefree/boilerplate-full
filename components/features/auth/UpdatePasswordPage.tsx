@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { ArrowLeft, CheckCircle2, KeyRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -22,7 +22,6 @@ function readTokensFromUrl() {
 }
 
 export function UpdatePasswordPage() {
-    const supabase = useMemo(() => createClient(), []);
     const router = useRouter();
     const { addToast } = useToast();
     const [password, setPassword] = useState("");
@@ -33,6 +32,7 @@ export function UpdatePasswordPage() {
 
     useEffect(() => {
         const establishRecoverySession = async () => {
+            const supabase = createClient();
             const { accessToken, refreshToken } = readTokensFromUrl();
 
             if (accessToken && refreshToken) {
@@ -61,7 +61,7 @@ export function UpdatePasswordPage() {
         };
 
         void establishRecoverySession();
-    }, [router, supabase]);
+    }, [router]);
 
     const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -86,6 +86,7 @@ export function UpdatePasswordPage() {
 
         setIsSubmitting(true);
 
+        const supabase = createClient();
         const { error } = await supabase.auth.updateUser({ password });
 
         setIsSubmitting(false);

@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getUserAccessContext } from "@/lib/auth/redirects";
 import DashboardLayoutClient from "@/components/features/dashboard/DashboardLayoutClient";
 
+export const dynamic = "force-dynamic";
+
 /**
  * Dashboard Layout
  * Wraps all dashboard pages in the sidebar and top navigation.

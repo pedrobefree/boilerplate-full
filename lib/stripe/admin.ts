@@ -13,10 +13,19 @@ import { triggerPasswordEmail } from "@/lib/auth-email";
 
 // NOTE: We use a direct service role client here for webhook handling to bypass specific RLS that might block system updates
 // or to ensure we have full access to write products/prices.
-const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+let supabaseAdminClient: any = null;
+
+function getSupabaseAdmin(): any {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !serviceRoleKey) {
+        throw new Error("Missing Supabase admin environment variables.");
+    }
+
+    supabaseAdminClient ??= createClient(supabaseUrl, serviceRoleKey);
+    return supabaseAdminClient;
+}
 
 function getOrderNumber(orderId: string) {
     return orderId.slice(0, 8).toUpperCase();
@@ -35,7 +44,7 @@ export const upsertProductRecord = async (product: Stripe.Product) => {
         metadata: product.metadata
     };
 
-    const { error } = await supabaseAdmin.from('products').upsert([productData]);
+    const { error } = await getSupabaseAdmin().from('products').upsert([productData]);
     if (error) throw error;
     console.log(`Product inserted/updated: ${product.id}`);
 };
@@ -58,7 +67,7 @@ export const upsertPriceRecord = async (price: Stripe.Price) => {
         metadata: price.metadata
     };
 
-    const { error } = await supabaseAdmin.from('prices').upsert([priceData]);
+    const { error } = await getSupabaseAdmin().from('prices').upsert([priceData]);
     if (error) throw error;
     console.log(`Price inserted/updated: ${price.id}`);
 };
@@ -77,7 +86,7 @@ export const manageSubscriptionStatusChange = async (
     }) as any;
 
     // 2. Find the Organization associated with this customer
-    const { data: orgs, error: orgError } = await supabaseAdmin
+    const { data: orgs, error: orgError } = await getSupabaseAdmin()
         .from('organizations')
         .select('id')
         .eq('stripe_customer_id', customerId);
@@ -114,7 +123,7 @@ export const manageSubscriptionStatusChange = async (
         trial_end: subscription.trial_end ? new Date(subscription.trial_end * 1000).toISOString() : null
     };
 
-    const { error } = await supabaseAdmin
+    const { error } = await getSupabaseAdmin()
         .from('subscriptions')
         .upsert([subscriptionData]);
 
@@ -123,7 +132,7 @@ export const manageSubscriptionStatusChange = async (
 
     // 4. Update Organization's generic status column if needed
     // (Optional shorthand for easier querying)
-    await supabaseAdmin
+    await getSupabaseAdmin()
         .from('organizations')
         .update({ subscription_status: subscription.status })
         .eq('id', org.id);
@@ -137,7 +146,7 @@ export const upsertOrganizationCustomer = async (
     organizationId: string,
     stripeCustomerId: string
 ) => {
-    const { error } = await supabaseAdmin
+    const { error } = await getSupabaseAdmin()
         .from('organizations')
         .update({ stripe_customer_id: stripeCustomerId })
         .eq('id', organizationId);
@@ -161,7 +170,7 @@ export const updateOrderStatus = async (
     console.log(`[DATA-FLOW] Starting updateOrderStatus for PI: ${paymentIntentId}`);
     
     // 1. Fetch current order to check for user association
-    const { data: order, error: orderError } = await supabaseAdmin
+    const { data: order, error: orderError } = await getSupabaseAdmin()
         .from('orders')
         .select('*')
         .eq('stripe_payment_intent_id', paymentIntentId)
@@ -196,8 +205,8 @@ export const updateOrderStatus = async (
     if (!userId && email) {
         console.log(`[DATA-FLOW] Attempting to find/create user for email: ${email}`);
         // Find existing user by email
-        const { data: userData } = await supabaseAdmin.auth.admin.listUsers();
-        const existingUser = userData.users.find(u => u.email === email);
+        const { data: userData } = await getSupabaseAdmin().auth.admin.listUsers();
+        const existingUser = userData.users.find((user: { email?: string }) => user.email === email);
 
         if (existingUser) {
             userId = existingUser.id;
@@ -205,7 +214,7 @@ export const updateOrderStatus = async (
         } else {
             console.log(`[DATA-FLOW] Creating new user for: ${email}`);
             // Create new user
-            const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+            const { data: newUser, error: createError } = await getSupabaseAdmin().auth.admin.createUser({
                 email,
                 user_metadata: { 
                     full_name: name,
@@ -225,7 +234,7 @@ export const updateOrderStatus = async (
                 // Generate Magic Link
                 // IMPORTANT: Use NEXT_PUBLIC_APP_URL if SITE_URL is missing
                 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-                const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+                const { data: linkData, error: linkError } = await getSupabaseAdmin().auth.admin.generateLink({
                     type: 'magiclink',
                     email,
                     options: { redirectTo: `${siteUrl}/auth/confirm` }
@@ -254,7 +263,7 @@ export const updateOrderStatus = async (
                 await new Promise(resolve => setTimeout(resolve, 1500));
             }
             
-            const { data: orgMember } = await supabaseAdmin
+            const { data: orgMember } = await getSupabaseAdmin()
                 .from('organization_members')
                 .select('organization_id')
                 .eq('user_id', userId)
@@ -272,7 +281,7 @@ export const updateOrderStatus = async (
         // ENSURE the user has the 'customer' role record.
         // This does NOT overwrite other roles (admin, member) because they are now separate records.
         console.log(`[DATA-FLOW] Ensuring 'customer' role record for user ${userId} in org ${orgId}`);
-        const { error: memberError } = await supabaseAdmin
+        const { error: memberError } = await getSupabaseAdmin()
             .from('organization_members')
             .upsert({
                 organization_id: orgId,
@@ -290,7 +299,7 @@ export const updateOrderStatus = async (
         const address = billingDetails.address;
         const profileUpdate: any = {};
 
-        const { data: profile } = await supabaseAdmin
+        const { data: profile } = await getSupabaseAdmin()
             .from('profiles')
             .select('*')
             .eq('id', userId)
@@ -308,7 +317,7 @@ export const updateOrderStatus = async (
 
             if (Object.keys(profileUpdate).length > 0) {
                 console.log(`[DATA-FLOW] Updating profile for user ${userId}`);
-                await supabaseAdmin
+                await getSupabaseAdmin()
                     .from('profiles')
                     .update(profileUpdate)
                     .eq('id', userId);
@@ -319,7 +328,7 @@ export const updateOrderStatus = async (
     // 4.5 Stripe Customer & Payment Method Sync
     if (orgId && extraStripeData?.payment_method_id) {
         // Find existing organization stripe_customer_id
-        const { data: orgData } = await supabaseAdmin
+        const { data: orgData } = await getSupabaseAdmin()
              .from('organizations')
              .select('stripe_customer_id, name')
              .eq('id', orgId)
@@ -337,7 +346,7 @@ export const updateOrderStatus = async (
                 });
                 stripeCustomerId = customer.id;
                 
-                await supabaseAdmin
+                await getSupabaseAdmin()
                     .from('organizations')
                     .update({ stripe_customer_id: customer.id })
                     .eq('id', orgId);
@@ -369,7 +378,7 @@ export const updateOrderStatus = async (
         updateData.magic_link = magicLink;
     }
 
-    const { error: updateError } = await supabaseAdmin
+    const { error: updateError } = await getSupabaseAdmin()
         .from('orders')
         .update(updateData)
         .eq('id', order.id);
@@ -400,7 +409,7 @@ export const updateOrderStatus = async (
         let customerName = name as string | undefined;
 
         if (userId) {
-            const { data: profile } = await supabaseAdmin
+            const { data: profile } = await getSupabaseAdmin()
                 .from("profiles")
                 .select("email, full_name")
                 .eq("id", userId)
@@ -411,7 +420,7 @@ export const updateOrderStatus = async (
         }
 
         if (status === "Payment Approved") {
-            const { data: items } = await supabaseAdmin
+            const { data: items } = await getSupabaseAdmin()
                 .from("order_items")
                 .select("quantity, unit_amount, product:products(name)")
                 .eq("order_id", order.id);
@@ -444,27 +453,27 @@ export const updateOrderStatus = async (
             }
 
             if (orgId) {
-                const { data: organization } = await supabaseAdmin
+                const { data: organization } = await getSupabaseAdmin()
                     .from("organizations")
                     .select("name")
                     .eq("id", orgId)
                     .maybeSingle();
 
-                const { data: adminMembers } = await supabaseAdmin
+                const { data: adminMembers } = await getSupabaseAdmin()
                     .from("organization_members")
                     .select("user_id, role")
                     .eq("organization_id", orgId)
                     .in("role", ["owner", "admin"]);
 
-                const adminIds = Array.from(new Set((adminMembers || []).map((member) => member.user_id)));
+                const adminIds = Array.from(new Set((adminMembers || []).map((member: { user_id: string }) => member.user_id)));
                 if (adminIds.length > 0) {
-                    const { data: adminProfiles } = await supabaseAdmin
+                    const { data: adminProfiles } = await getSupabaseAdmin()
                         .from("profiles")
                         .select("id, email")
                         .in("id", adminIds);
 
                     const adminEmails = Array.from(
-                        new Set((adminProfiles || []).map((profile) => profile.email).filter(Boolean))
+                        new Set((adminProfiles || []).map((profile: { email?: string | null }) => profile.email).filter(Boolean))
                     ) as string[];
 
                     if (adminEmails.length > 0) {

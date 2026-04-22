@@ -13,11 +13,11 @@ export const UserMenu = () => {
     const { user, signOut } = useAuth();
     const router = useRouter();
     const [isAdmin, setIsAdmin] = useState(false);
-    const supabase = createClient();
 
     useEffect(() => {
         const checkRole = async () => {
             if (!user) return;
+            const supabase = createClient();
             const { data: memberships } = await supabase
                 .from('organization_members')
                 .select('role')
@@ -28,7 +28,7 @@ export const UserMenu = () => {
         };
 
         checkRole();
-    }, [user, supabase]);
+    }, [user]);
 
     if (!user) return null;
 
